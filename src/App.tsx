@@ -20,6 +20,7 @@ import {
   type Lesson,
 } from "./state/lesson";
 import { CubeView, type CubeHandle } from "./view/CubeView";
+import { Disclosure } from "./view/Disclosure";
 import { ScanFlow } from "./view/ScanFlow";
 import { TeachingPanel } from "./view/TeachingPanel";
 
@@ -195,8 +196,7 @@ export function App() {
             <button type="button" onClick={() => void go(-1)} disabled={lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0)}>Back</button>
             <button type="button" className="primary" onClick={() => void go(1)} disabled={lesson.busy || loading || !nextMove}>Next{nextMove ? ` · ${nextMove}` : ""}</button>
           </div>
-          <details className="face-fallback">
-            <summary>Face buttons</summary>
+          <Disclosure className="face-fallback" show="Show face buttons" hide="Hide face buttons" controls="face-buttons">
             <p className="quiet">These follow the hold above, even after you rotate the view. One piece cannot turn on its own.</p>
             <div className="face-pad" role="group" aria-label="Turn a face. These follow the hold, not the camera.">
               {FACE_BUTTONS.map((button) => (
@@ -205,7 +205,7 @@ export function App() {
                 </button>
               ))}
             </div>
-          </details>
+          </Disclosure>
           {gestureNote ? <p className="notice" role="status">{gestureNote}</p> : null}
           {lesson.notice ? <p className="notice" role="status">{lesson.notice}</p> : null}
           {error ? <p className="error" role="alert">{error}</p> : null}

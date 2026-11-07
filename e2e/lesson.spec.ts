@@ -16,6 +16,39 @@ test.afterEach(async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("show and hide controls are buttons you can use from the keyboard", async ({ page }, testInfo) => {
+  const faces = page.locator("details.face-fallback summary");
+  await expect(faces).toHaveText("Show face buttons");
+  await expect(faces).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("button", { name: "Top, front edge left U", exact: true })).toBeHidden();
+  if (testInfo.project.name === "desktop") {
+    await faces.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: "/tmp/rubic-disclosure-desktop.png" });
+  }
+  await faces.focus();
+  await expect(faces).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(faces).toHaveText("Hide face buttons");
+  await expect(faces).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Top, front edge left U", exact: true })).toBeVisible();
+  await faces.click();
+  await expect(faces).toHaveText("Show face buttons");
+  await expect(faces).toHaveAttribute("aria-expanded", "false");
+
+  await page.getByRole("button", { name: "Scramble" }).click();
+  const why = page.locator("details.more summary");
+  await expect(why).toHaveText("Show why this step", { timeout: 20_000 });
+  await expect(why).toHaveAttribute("aria-expanded", "false");
+  await why.focus();
+  await page.keyboard.press("Enter");
+  await expect(why).toHaveText("Hide why this step");
+  await expect(why).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("On this cube.")).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(why).toHaveText("Show why this step");
+  await expect(why).toHaveAttribute("aria-expanded", "false");
+});
+
 test("scramble, next, back, and demonstration stay in step", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: "Scramble" }).click();
   const step = page.getByTestId("lesson-step");
