@@ -70,6 +70,7 @@ export function App() {
       const solution = await solveInWorker(start);
       setLesson((current) => withSolution({ ...current, history: [] }, start, solution, notice));
       setMode("learn");
+      requestAnimationFrame(() => document.getElementById("cube-title")?.scrollIntoView({ block: "start" }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The lesson could not be prepared.");
     } finally {

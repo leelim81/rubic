@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { applyMoves, mulberry32, randomScramble, solvedBytes } from "../src/cube/model";
+import { applyMoves, solvedBytes } from "../src/cube/model";
 import { CANONICAL_RGB, FACE_SAMPLE_MARGIN, paintSyntheticFace, rotateNine, type ColorName } from "../src/scan/color";
 import { photographCube } from "../src/scan/mapping";
 import { encodePng } from "./png";
@@ -20,11 +20,10 @@ async function upload(page: Page, colours: ColorName[], options?: { tint?: [numb
   await expect(page.getByRole("grid", { name: "Nine stickers" })).toBeVisible();
 }
 
-test("uploads six synthetic faces of a known scramble and solves it", async ({ page }, info) => {
-  test.skip(info.project.name !== "desktop", "The full click-through is checked on desktop; mobile covers scan controls.");
-  test.setTimeout(120_000);
+test("scans a short legal cube and solves it through a stage change", async ({ page }, info) => {
+  test.setTimeout(60_000);
   await page.emulateMedia({ reducedMotion: "reduce" });
-  const scrambled = applyMoves(solvedBytes(), randomScramble(mulberry32(7), 12));
+  const scrambled = applyMoves(solvedBytes(), ["U", "R"]);
   const photos = photographCube(scrambled);
   await page.goto("./");
   await page.getByRole("button", { name: "Scan" }).click();
@@ -32,12 +31,10 @@ test("uploads six synthetic faces of a known scramble and solves it", async ({ p
     const face = (["F", "R", "B", "L", "U", "D"] as const)[index]!;
     await upload(page, photos[face]!);
     const uncertain = page.locator(".sticker.uncertain");
-    const count = await uncertain.count();
-    for (let i = 0; i < count; i++) {
+    while ((await uncertain.count()) > 0) {
       await uncertain.first().click();
-      const label = await page.locator(".sticker.selected").getAttribute("aria-label");
-      const colour = label?.split(",")[0]?.replace(" centre", "") ?? "white";
-      await page.getByRole("button", { name: colour, exact: true }).click();
+      const label = (await page.locator(".sticker.selected").getAttribute("aria-label")) ?? "white";
+      await page.getByRole("button", { name: label.split(",")[0]!.replace(" centre", ""), exact: true }).click();
     }
     await page.getByRole("button", { name: index === 5 ? "Review the cube" : "Keep this face" }).click();
   }
@@ -46,19 +43,36 @@ test("uploads six synthetic faces of a known scramble and solves it", async ({ p
   await expect(start).toBeDisabled();
   await page.getByRole("checkbox").check();
   await start.click();
-  await expect(page.locator("#cube-title")).toContainText(/Stage|Hold/, { timeout: 20_000 });
-  const firstStage = await page.locator("#cube-title").textContent();
-  await page.getByRole("button", { name: /^Next/ }).click();
-  await page.getByRole("button", { name: "Back" }).click();
-  await expect(page.locator("#cube-title")).toHaveText(firstStage ?? "");
-  await page.getByRole("button", { name: "Play", exact: true }).click();
-  await expect(page.locator("#cube-title")).toHaveText(firstStage ?? "");
-  for (let step = 0; step < 220; step++) {
-    const next = page.getByRole("button", { name: /^Next/ });
-    if (await next.isDisabled()) break;
-    await next.click();
+  const title = page.locator("#cube-title");
+  await expect(title).toHaveText(/White cross/, { timeout: 20_000 });
+  await expect(page.getByText("Move 1 of 3")).toBeVisible();
+  const next = page.getByRole("button", { name: /^Next/ });
+  const box = await next.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box).toBeTruthy();
+  expect(viewport).toBeTruthy();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height + 1);
+  if (info.project.name === "mobile") {
+    expect(box!.width).toBeGreaterThan(viewport!.width * 0.7);
   }
-  await expect(page.locator("#cube-title")).toHaveText(/^Solved/);
+  await next.click();
+  await expect(title).toHaveText(/White cross/);
+  await expect(page.getByText("Move 2 of 3")).toBeVisible();
+  await next.click();
+  await expect(title).toHaveText(/Match the cross/);
+  await expect(page.getByText("Move 3 of 3")).toBeVisible();
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(title).toHaveText(/White cross/);
+  await expect(page.getByText("Move 2 of 3")).toBeVisible();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.getByText("Move 2 of 3")).toBeVisible();
+  await expect(title).toHaveText(/White cross/);
+  await next.click();
+  await expect(title).toHaveText(/Match the cross/);
+  await next.click();
+  await expect(title).toHaveText(/^Solved/);
+  await expect(page.getByRole("button", { name: /^Next/ })).toBeDisabled();
 });
 
 test("edits all nine stickers including the centre, and a centre rename propagates", async ({ page }) => {
