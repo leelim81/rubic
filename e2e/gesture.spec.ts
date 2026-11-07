@@ -70,14 +70,19 @@ test("a short drag explains itself and does not change the cube", async ({ page 
 });
 
 test("the inverse of a lesson move restores the counter, and a wrong move does not", async ({ page }) => {
-  await page.getByRole("button", { name: "Scramble" }).click();
   const step = page.getByTestId("lesson-step");
-  await expect(step).toHaveText(/Step 1 of/, { timeout: 20_000 });
+  let move = "";
+  let nextLabel = "";
+  for (let attempt = 0; attempt < 12 && !FACE_BUTTON[move]; attempt++) {
+    if (attempt > 0) await page.getByRole("button", { name: "Reset", exact: true }).click();
+    await page.getByRole("button", { name: "Scramble" }).click();
+    await expect(step).toHaveText(/Step 1 of/, { timeout: 20_000 });
+    nextLabel = (await page.getByRole("button", { name: /^Next/ }).textContent()) ?? "";
+    move = nextLabel.split("·")[1]?.trim() ?? "";
+  }
+  expect(FACE_BUTTON[move], `next move was ${nextLabel}`).toBeTruthy();
   const stepBefore = await step.textContent();
   const faceletsBefore = await page.getByTestId("lesson-facelets").textContent();
-  const nextLabel = (await page.getByRole("button", { name: /^Next/ }).textContent()) ?? "";
-  const move = nextLabel.split("·")[1]?.trim() ?? "";
-  expect(FACE_BUTTON[move]).toBeTruthy();
   await page.locator("details.face-fallback summary").click();
   await page.getByRole("button", { name: `${FACE_BUTTON[move]} ${move}`, exact: true }).click();
   await expect(step).not.toHaveText(stepBefore ?? "", { timeout: 15_000 });
