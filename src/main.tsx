@@ -1,0 +1,12 @@
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "@fontsource/outfit/400.css";
+import "@fontsource/outfit/500.css";
+import "@fontsource/outfit/700.css";
+import "@fontsource/fraunces/600.css";
+import "@fontsource/fraunces/700.css";
+import "./styles.css";
+import { App } from "./App";
+
+const root = document.getElementById("root");
+if (root) createRoot(root).render(<StrictMode><App /></StrictMode>);

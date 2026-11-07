@@ -1,0 +1,35 @@
+{
+  "name": "rubic",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A learning-first 3x3 Rubik's cube lesson that runs as a static site.",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fontsource/fraunces": "5.2.9",
+    "@fontsource/outfit": "5.2.8",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@types/three": "0.180.0",
+    "@vitejs/plugin-react": "5.1.0",
+    "jsdom": "27.0.1",
+    "typescript": "5.9.3",
+    "vite": "7.1.12",
+    "vitest": "3.2.4"
+  },
+  "license": "MIT"
+}
