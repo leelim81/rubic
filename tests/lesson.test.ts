@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { faceletsToString, solvedBytes } from "../src/cube/model";
+import { applyMoves, faceletsToString, solvedBytes, stringToFacelets } from "../src/cube/model";
 import {
   beginAnimation,
+  commitTurn,
   currentFacelets,
   decideTurn,
   deviate,
@@ -84,7 +85,43 @@ describe("lesson controls", () => {
     lesson = stepForward(lesson);
     expect(decideTurn(lesson, "F")).toBe("reject");
     expect(decideTurn(lesson, "F")).toBe("reject");
+    expect(decideTurn(lesson, "F")).toBe("reject");
     expect(lesson.cursor).toBe(1);
     expect(currentFacelets(lesson)).toBe(currentFacelets(stepForward(withSolution(emptyLesson(solved), solved, sample()))));
   });
+
+  it("completes a half turn with two matching quarters and undoes it the same way", () => {
+    const start = faceletsToString(applyMoves(stringToFacelets(solved), ["R2"]));
+    let lesson = halfLesson(start, ["R2"]);
+    expect(currentFacelets(lesson)).toBe(start);
+    expect(decideTurn(lesson, "U")).toBe("reject");
+    lesson = commitTurn(lesson, "U").lesson;
+    expect(currentFacelets(lesson)).toBe(start);
+    expect(lesson.cursor).toBe(0);
+    lesson = commitTurn(lesson, "R").lesson;
+    expect(lesson.pending).toEqual({ move: "R", intent: "do" });
+    expect(currentFacelets(lesson)).toBe(faceletsToString(applyMoves(stringToFacelets(start), ["R"])));
+    const midway = currentFacelets(lesson);
+    lesson = commitTurn(lesson, "F").lesson;
+    expect(currentFacelets(lesson)).toBe(midway);
+    expect(lesson.pending?.move).toBe("R");
+    lesson = commitTurn(lesson, "R'").lesson;
+    expect(lesson.pending).toBeNull();
+    expect(currentFacelets(lesson)).toBe(start);
+    lesson = commitTurn(commitTurn(lesson, "R'").lesson, "R'").lesson;
+    expect(lesson.cursor).toBe(1);
+    expect(lesson.pending).toBeNull();
+    expect(currentFacelets(lesson)).toBe(solved);
+    lesson = commitTurn(commitTurn(lesson, "R").lesson, "R").lesson;
+    expect(lesson.cursor).toBe(0);
+    expect(currentFacelets(lesson)).toBe(start);
+  });
 });
+
+function halfLesson(start: string, moves: string[]) {
+  const solution = sample();
+  solution.moves = moves;
+  solution.chunkOfMove = moves.map(() => 0);
+  solution.chunks[0]!.moves = moves;
+  return withSolution(emptyLesson(solved), start, solution);
+}

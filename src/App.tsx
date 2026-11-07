@@ -8,6 +8,7 @@ import {
   beginAnimation,
   branchFrom,
   currentFacelets,
+  commitTurn,
   decideTurn,
   emptyLesson,
   endAnimation,
@@ -86,6 +87,14 @@ export function App() {
 
   async function go(direction: 1 | -1) {
     if (lesson.busy || loading) return;
+    if (lesson.pending && direction === 1 && lesson.pending.intent === "do") {
+      await userTurn(lesson.pending.move);
+      return;
+    }
+    if (lesson.pending && direction === -1) {
+      await userTurn(invertMove(lesson.pending.move));
+      return;
+    }
     if (direction === 1 && !nextMove) return;
     if (direction === -1 && lesson.cursor === 0) {
       if (lesson.history.length) setLesson((current) => stepBack(current));
@@ -121,9 +130,16 @@ export function App() {
       await go(-1);
       return;
     }
-    if (choice === "reject") {
-      const expected = nextMove ? ` Next is ${nextMove}.` : "";
-      setLesson((current) => ({ ...current, notice: `${move} is not the next lesson move, so the cube stays as it is.${expected} The opposite of the move you just did steps back.` }));
+    if (choice === "reject" || choice === "start-half" || choice === "start-undo" || choice === "finish-half" || choice === "finish-undo" || choice === "cancel-pending") {
+      const result = commitTurn(lesson, move);
+      if (!result.animate) {
+        setLesson(result.lesson);
+        return;
+      }
+      setGestureNote(null);
+      setLesson((current) => beginAnimation(current));
+      await cubeRef.current?.animate(result.animate, currentFacelets(result.lesson));
+      setLesson(() => endAnimation(result.lesson));
       return;
     }
     const next = applyUserMove(facelets, move);
@@ -194,7 +210,7 @@ export function App() {
           {viewShift ? <p className="view-warning" role="status">The view has moved. Face buttons and lesson moves still use the hold above, not whichever side faces the screen. <button type="button" onClick={() => cubeRef.current?.resetView()}>Reset view</button></p> : null}
           <div className="controls">
             <button type="button" onClick={() => void go(-1)} disabled={lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0)}>Back</button>
-            <button type="button" className="primary" onClick={() => void go(1)} disabled={lesson.busy || loading || !nextMove}>Next{nextMove ? ` · ${nextMove}` : ""}</button>
+            <button type="button" className="primary" onClick={() => void go(1)} disabled={lesson.busy || loading || (!nextMove && lesson.pending?.intent !== "do") || lesson.pending?.intent === "undo"}>Next{lesson.pending?.intent === "do" ? ` · ${lesson.pending.move}` : nextMove ? ` · ${nextMove}` : ""}</button>
           </div>
           <Disclosure className="face-fallback" show="Show face buttons" hide="Hide face buttons" controls="face-buttons">
             <p className="quiet">These follow the hold above, even after you rotate the view. One piece cannot turn on its own.</p>
@@ -369,7 +385,7 @@ function loadLesson(): Lesson {
     if (!raw) return emptyLesson(SOLVED);
     const saved = JSON.parse(raw) as Lesson;
     if (!saved.start || !Array.isArray(saved.moves)) return emptyLesson(SOLVED);
-    return { ...emptyLesson(SOLVED), ...saved, busy: false, arrivedBy: saved.arrivedBy ?? null };
+    return { ...emptyLesson(SOLVED), ...saved, busy: false, arrivedBy: saved.arrivedBy ?? null, pending: saved.pending ?? null };
   } catch {
     return emptyLesson(SOLVED);
   }
