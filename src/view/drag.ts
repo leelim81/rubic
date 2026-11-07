@@ -45,31 +45,60 @@ export function interpretDrag(position: Vec, normal: Vec, drag: Vec): string | n
   return result.kind === "move" ? result.move : null;
 }
 
+export type TurnResolution = { move: string; reason: "move" } | { move: null; reason: "ambiguous" | "unclear" };
+
 /**
- * Turn to commit when the pointer is released.
- * Outer stickers slide their layer. The centre of a face only spins, so a drag
- * there turns that whole face clockwise or anticlockwise instead of doing nothing.
- * `upHint` is the camera's up direction, used only for that centre-face case.
+ * The layer slide is kept when it is clear. If the sticker you grabbed is on a
+ * different face, and turning that face follows the finger better, that face wins.
+ * A drag straight out from the centre, or one that matches two layers, is refused.
  */
-export function resolveTurn(position: Vec, normal: Vec, drag: Vec, upHint: Vec): string | null {
-  const result = classifyDrag(position, normal, drag);
-  if (result.kind === "move") return result.move;
-  if (result.kind === "ambiguous") return null;
-  return centreFaceTurn(normal, drag, upHint);
+export function resolveTurn(position: Vec, normal: Vec, drag: Vec, upHint: Vec, forward?: Vec): TurnResolution {
+  const layer = classifyDrag(position, normal, drag);
+  const faceMove = touchedFaceTurn(position, normal, drag, upHint, forward);
+  if (layer.kind === "move" && faceMove) {
+    if (layer.move[0] === faceMove[0]) return { move: layer.move, reason: "move" };
+    const layerScore = moveAlignment(layer.move, position, drag);
+    const faceScore = moveAlignment(faceMove, position, drag);
+    // A front-face drag keeps the layer slide when the two are equal, so the top edge still moves as U.
+    // On any other face, a tie goes to the face under the finger.
+    const preferFace = normal.z > 0.85 ? faceScore > layerScore : faceScore >= layerScore;
+    return { move: preferFace ? faceMove : layer.move, reason: "move" };
+  }
+  if (layer.kind === "move") return { move: layer.move, reason: "move" };
+  if (faceMove) return { move: faceMove, reason: "move" };
+  if (layer.kind === "ambiguous") return { move: null, reason: "ambiguous" };
+  return { move: null, reason: "unclear" };
 }
 
-function centreFaceTurn(normal: Vec, drag: Vec, upHint: Vec): string | null {
+const LETTER_AXIS: Record<string, { axis: Vec; sign: number }> = {
+  U: { axis: { x: 0, y: 1, z: 0 }, sign: -1 },
+  D: { axis: { x: 0, y: 1, z: 0 }, sign: 1 },
+  R: { axis: { x: 1, y: 0, z: 0 }, sign: -1 },
+  L: { axis: { x: 1, y: 0, z: 0 }, sign: 1 },
+  F: { axis: { x: 0, y: 0, z: 1 }, sign: -1 },
+  B: { axis: { x: 0, y: 0, z: 1 }, sign: 1 },
+};
+
+function moveAlignment(move: string, position: Vec, drag: Vec): number {
+  const letter = LETTER_AXIS[move[0] ?? ""];
+  if (!letter) return 0;
+  const sign = move.endsWith("'") ? -letter.sign : letter.sign;
+  const displacement = cross(scale(letter.axis, sign), position);
+  return dot(displacement, drag);
+}
+
+function touchedFaceTurn(position: Vec, normal: Vec, drag: Vec, upHint: Vec, forward?: Vec): string | null {
   const face = faceFromNormal(normal);
   if (!face) return null;
-  let radial = reject(upHint, normal);
-  if (Math.hypot(radial.x, radial.y, radial.z) < 0.2) {
-    const fallback = Math.abs(normal.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
-    radial = reject(fallback, normal);
-  }
-  const length = Math.hypot(radial.x, radial.y, radial.z) || 1;
+  const centre = { x: normal.x, y: normal.y, z: normal.z };
+  let radial = { x: position.x - centre.x, y: position.y - centre.y, z: position.z - centre.z };
+  if (Math.hypot(radial.x, radial.y, radial.z) < 0.45 && forward) radial = reject(scale(forward, -1), normal);
+  if (Math.hypot(radial.x, radial.y, radial.z) < 0.2) radial = reject(upHint, normal);
+  if (Math.hypot(radial.x, radial.y, radial.z) < 0.2) return null;
+  const length = Math.hypot(radial.x, radial.y, radial.z);
   radial = { x: radial.x / length, y: radial.y / length, z: radial.z / length };
   const spin = dot(normal, cross(radial, drag));
-  const dragLength = Math.hypot(drag.x, drag.y, drag.z);
+  const dragLength = Math.hypot(drag.x, drag.y, drag.z) || 1;
   if (Math.abs(spin) < 0.2 * dragLength) return null;
   return spin < 0 ? face : `${face}'`;
 }
@@ -90,6 +119,10 @@ function faceOnAxis(axis: "x" | "y" | "z", coordinate: number): string | null {
   if (axis === "y") return coordinate > 0 ? "U" : "D";
   if (axis === "x") return coordinate > 0 ? "R" : "L";
   return coordinate > 0 ? "F" : "B";
+}
+
+function scale(vector: Vec, factor: number): Vec {
+  return { x: vector.x * factor, y: vector.y * factor, z: vector.z * factor };
 }
 
 function dot(a: Vec, b: Vec): number {

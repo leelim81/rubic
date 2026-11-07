@@ -20,6 +20,8 @@ Photos, sampled colours, and the lesson stay in your browser (`sessionStorage` r
 
 A scan can be geometrically legal and still be the wrong cube. The app asks you to compare the 3D reconstruction with the physical cube before the lesson starts. Uncertain sticker colours are flagged and need a tap. Tests of colour use synthetic lighting, not a claim about every real camera and lamp.
 
+Downloadable practice photos, in scan order, are at [/rubic/fixtures/](https://leelim81.github.io/rubic/fixtures/). They are a legal cube after R U R' U', plus one inset front for the crop handles. They are not photographs of a physical cube.
+
 ## Local development
 
 ```bash

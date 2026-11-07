@@ -6,10 +6,12 @@ import { solveInWorker } from "./solveClient";
 import {
   applyUserMove,
   beginAnimation,
+  branchFrom,
   currentFacelets,
-  deviate,
+  decideTurn,
   emptyLesson,
   endAnimation,
+  invertMove,
   progressLabel,
   stepBack,
   stepForward,
@@ -31,6 +33,7 @@ export function App() {
   const [viewShift, setViewShift] = useState(false);
   const [mode, setMode] = useState<"learn" | "scan" | "manual" | "primer">("learn");
   const [error, setError] = useState<string | null>(null);
+  const [gestureNote, setGestureNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const cubeRef = useRef<CubeHandle>(null);
   const facelets = currentFacelets(lesson);
@@ -39,6 +42,7 @@ export function App() {
   const demo = upcoming(lesson);
   const reduced = useMemo(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches, []);
   const onViewShift = useCallback((shifted: boolean) => setViewShift(shifted), []);
+  const onGesture = useCallback((message: string | null) => setGestureNote(message), []);
 
   useEffect(() => {
     sessionStorage.setItem(STORAGE, JSON.stringify({ start: lesson.start, moves: lesson.moves, chunkOfMove: lesson.chunkOfMove, chunks: lesson.chunks, cursor: lesson.cursor, history: lesson.history }));
@@ -98,8 +102,27 @@ export function App() {
 
   async function userTurn(move: string) {
     if (lesson.busy || loading) return;
-    if (move === nextMove) {
+    const choice = decideTurn(lesson, move);
+    if (choice === "forward") {
+      setGestureNote(null);
       await go(1);
+      return;
+    }
+    if (choice === "back") {
+      setGestureNote(null);
+      if (lesson.cursor === 0) {
+        const restored = stepBack(lesson);
+        setLesson((current) => beginAnimation(current));
+        await cubeRef.current?.animate(move, currentFacelets(restored));
+        setLesson((current) => endAnimation(stepBack({ ...current, busy: false })));
+        return;
+      }
+      await go(-1);
+      return;
+    }
+    if (choice === "reject") {
+      const expected = nextMove ? ` Next is ${nextMove}.` : "";
+      setLesson((current) => ({ ...current, notice: `${move} is not the next lesson move, so the cube stays as it is.${expected} The opposite of the move you just did steps back.` }));
       return;
     }
     const next = applyUserMove(facelets, move);
@@ -108,10 +131,11 @@ export function App() {
     setLoading(true);
     try {
       const solution = await solveInWorker(next);
-      setLesson((current) => endAnimation(deviate(current, next, solution)));
+      setLesson((current) => endAnimation(branchFrom(current, next, solution, move, `${move} starts a new lesson. ${invertMove(move)} returns to the previous one.`)));
     } catch (caught) {
       setLesson((current) => endAnimation(current));
       setError(caught instanceof Error ? caught.message : "That turn could not be used.");
+      await cubeRef.current?.animate("", facelets);
     } finally {
       setLoading(false);
     }
@@ -140,8 +164,7 @@ export function App() {
         <section className="stage-column" aria-labelledby="cube-title">
           <div className="progress" aria-live="polite">
             <p id="cube-title">{labels.stage}</p>
-            <p>{labels.move}</p>
-            <p>{labels.remaining}</p>
+            <p data-testid="lesson-step">{labels.step}</p>
           </div>
           <div className="gesture-toggle" role="group" aria-label="How a drag on the cube behaves">
             <button type="button" className={gesture === "view" ? "on" : ""} aria-pressed={gesture === "view"} onClick={() => setGesture("view")}>Rotate view</button>
@@ -162,6 +185,7 @@ export function App() {
               label={cubeLabel(facelets, nextMove)}
               onTurn={(move) => void userTurn(move)}
               onViewShift={onViewShift}
+              onGesture={onGesture}
             />
           </div>
           <p className="sr-only" data-testid="lesson-facelets">{facelets}</p>
@@ -171,13 +195,18 @@ export function App() {
             <button type="button" onClick={() => void go(-1)} disabled={lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0)}>Back</button>
             <button type="button" className="primary" onClick={() => void go(1)} disabled={lesson.busy || loading || !nextMove}>Next{nextMove ? ` · ${nextMove}` : ""}</button>
           </div>
-          <div className="face-pad" role="group" aria-label="Turn a face. These follow the hold, not the camera.">
-            {FACE_BUTTONS.map((button) => (
-              <button key={button.move} type="button" onClick={() => void userTurn(button.move)} disabled={lesson.busy || loading} title={button.accessible}>
-                {button.label} <span className="move-code">{button.move}</span>
-              </button>
-            ))}
-          </div>
+          <details className="face-fallback">
+            <summary>Face buttons</summary>
+            <p className="quiet">These follow the hold above, even after you rotate the view. One piece cannot turn on its own.</p>
+            <div className="face-pad" role="group" aria-label="Turn a face. These follow the hold, not the camera.">
+              {FACE_BUTTONS.map((button) => (
+                <button key={button.move} type="button" onClick={() => void userTurn(button.move)} disabled={lesson.busy || loading} title={button.accessible}>
+                  {button.label} <span className="move-code">{button.move}</span>
+                </button>
+              ))}
+            </div>
+          </details>
+          {gestureNote ? <p className="notice" role="status">{gestureNote}</p> : null}
           {lesson.notice ? <p className="notice" role="status">{lesson.notice}</p> : null}
           {error ? <p className="error" role="alert">{error}</p> : null}
           {loading ? <p className="quiet" role="status">Preparing the lesson… you can keep looking at the cube.</p> : null}
@@ -194,7 +223,7 @@ export function App() {
             Letter stickers (W Y R O B G) as well as colour
           </label>
           {reduced ? <p className="quiet">Reduced motion is on. Moves jump to the next state, and the move letter is still announced above.</p> : null}
-          <p className="quiet">Next does one lesson move. It cannot see your hands. A different face turn restarts the lesson from the cube as it is now.</p>
+          <p className="quiet">Next does the move in this step. Its opposite steps back. A different turn leaves the lesson as it is.</p>
         </section>
         <TeachingPanel
           facelets={facelets}
@@ -340,7 +369,7 @@ function loadLesson(): Lesson {
     if (!raw) return emptyLesson(SOLVED);
     const saved = JSON.parse(raw) as Lesson;
     if (!saved.start || !Array.isArray(saved.moves)) return emptyLesson(SOLVED);
-    return { ...emptyLesson(SOLVED), ...saved, busy: false };
+    return { ...emptyLesson(SOLVED), ...saved, busy: false, arrivedBy: saved.arrivedBy ?? null };
   } catch {
     return emptyLesson(SOLVED);
   }

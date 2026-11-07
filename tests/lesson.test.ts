@@ -3,6 +3,7 @@ import { faceletsToString, solvedBytes } from "../src/cube/model";
 import {
   beginAnimation,
   currentFacelets,
+  decideTurn,
   deviate,
   emptyLesson,
   endAnimation,
@@ -68,5 +69,22 @@ describe("lesson controls", () => {
     const branched = deviate(lesson, solved, { ...sample(), moves: ["U"], chunkOfMove: [0], chunks: [{ ...sample().chunks[0]!, moves: ["U"] }] });
     expect(branched.moves).toEqual(["U"]);
     expect(stepBack(branched).moves).toEqual(["R", "U", "R'"]);
+  });
+
+  it("steps back when the manual turn is the inverse, and refuses a different one", () => {
+    let lesson = withSolution(emptyLesson(solved), solved, sample());
+    expect(decideTurn(lesson, "R")).toBe("forward");
+    lesson = stepForward(endAnimation(lesson));
+    expect(currentFacelets(lesson)).not.toBe(solved);
+    expect(decideTurn(lesson, "R'")).toBe("back");
+    lesson = stepBack(lesson);
+    expect(lesson.cursor).toBe(0);
+    expect(currentFacelets(lesson)).toBe(solved);
+    expect(lesson.moves).toEqual(["R", "U", "R'"]);
+    lesson = stepForward(lesson);
+    expect(decideTurn(lesson, "F")).toBe("reject");
+    expect(decideTurn(lesson, "F")).toBe("reject");
+    expect(lesson.cursor).toBe(1);
+    expect(currentFacelets(lesson)).toBe(currentFacelets(stepForward(withSolution(emptyLesson(solved), solved, sample()))));
   });
 });

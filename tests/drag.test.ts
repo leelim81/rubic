@@ -14,8 +14,17 @@ describe("layer drags", () => {
 
   it("turns the whole face when the drag starts on its centre", () => {
     const up = { x: 0, y: 1, z: 0 };
-    expect(resolveTurn({ x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: 1 }, { x: 1, y: 0, z: 0 }, up)).toBe("F");
-    expect(resolveTurn({ x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: 1 }, { x: -1, y: 0, z: 0 }, up)).toBe("F'");
-    expect(resolveTurn({ x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 }, { x: -1, y: 0, z: 0 }, up)).toBe("U");
+    expect(resolveTurn({ x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: 1 }, { x: 1, y: 0, z: 0 }, up).move).toBe("F");
+    expect(resolveTurn({ x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: 1 }, { x: -1, y: 0, z: 0 }, up).move).toBe("F'");
+    expect(resolveTurn({ x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 }, { x: -1, y: 0, z: 0 }, up).move).toBe("U");
+  });
+
+  it("turns the right face when a finger on that face drags up", () => {
+    const up = { x: 0, y: 1, z: 0 };
+    const forward = { x: 0, y: 0, z: -1 };
+    const drag = { x: 0, y: 1, z: 0 };
+    expect(resolveTurn({ x: 1, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, drag, up, forward).move).toBe("R");
+    expect(resolveTurn({ x: 1, y: 0, z: 1 }, { x: 1, y: 0, z: 0 }, drag, up, forward).move).toBe("R");
+    expect(resolveTurn({ x: 1, y: 0, z: 1 }, { x: 0, y: 0, z: 1 }, drag, up, forward).move).toBe("R");
   });
 });

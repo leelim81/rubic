@@ -14,10 +14,11 @@ interface Props {
   label: string;
   onTurn?: (move: string) => void;
   onViewShift?: (shifted: boolean) => void;
+  onGesture?: (message: string | null) => void;
 }
 
 export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
-  { facelets, highlight = [], letters, gesture, label, onTurn, onViewShift },
+  { facelets, highlight = [], letters, gesture, label, onTurn, onViewShift, onGesture },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -27,7 +28,7 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const scene = new CubeScene(canvas, { reducedMotion: reduced, letters, gesture, onTurn, onViewShift });
+    const scene = new CubeScene(canvas, { reducedMotion: reduced, letters, gesture, onTurn, onViewShift, onGesture });
     sceneRef.current = scene;
     scene.setFacelets(facelets);
     scene.setHighlight(highlight);
@@ -40,8 +41,8 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   }, []);
 
   useEffect(() => {
-    sceneRef.current?.setOptions({ letters, gesture, reducedMotion: reduced, onTurn, onViewShift });
-  }, [letters, gesture, reduced, onTurn, onViewShift]);
+    sceneRef.current?.setOptions({ letters, gesture, reducedMotion: reduced, onTurn, onViewShift, onGesture });
+  }, [letters, gesture, reduced, onTurn, onViewShift, onGesture]);
 
   useEffect(() => {
     sceneRef.current?.setFacelets(facelets);

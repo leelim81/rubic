@@ -58,7 +58,7 @@ test("scans a short legal cube and solves it through a stage change", async ({ p
   await start.click();
   const title = page.locator("#cube-title");
   await expect(title).toHaveText(/White cross/, { timeout: 20_000 });
-  await expect(page.getByText("Move 1 of 3")).toBeVisible();
+  await expect(page.getByTestId("lesson-step")).toHaveText("Step 1 of 2, move 1");
   const next = page.getByRole("button", { name: /^Next/ });
   const box = await next.boundingBox();
   const viewport = page.viewportSize();
@@ -71,15 +71,15 @@ test("scans a short legal cube and solves it through a stage change", async ({ p
   }
   await next.click();
   await expect(title).toHaveText(/White cross/);
-  await expect(page.getByText("Move 2 of 3")).toBeVisible();
+  await expect(page.getByTestId("lesson-step")).toHaveText("Step 2 of 2, move 1");
   await next.click();
   await expect(title).toHaveText(/Match the cross/);
-  await expect(page.getByText("Move 3 of 3")).toBeVisible();
+  await expect(page.getByTestId("lesson-step")).toHaveText("Step 1 of 1, move 1");
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(title).toHaveText(/White cross/);
-  await expect(page.getByText("Move 2 of 3")).toBeVisible();
+  await expect(page.getByTestId("lesson-step")).toHaveText("Step 2 of 2, move 1");
   await page.getByRole("button", { name: "Play", exact: true }).click();
-  await expect(page.getByText("Move 2 of 3")).toBeVisible();
+  await expect(page.getByTestId("lesson-step")).toHaveText("Step 2 of 2, move 1");
   await expect(title).toHaveText(/White cross/);
   await next.click();
   await expect(title).toHaveText(/Match the cross/);

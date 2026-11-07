@@ -42,6 +42,7 @@ test("turn mode follows the sticker, a short drag cancels, and buttons invert it
   expect(move).toBe("U");
   await mouseDrag(page, box, from, { x: from.x - 48, y: from.y });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), [move!])));
+  await page.locator("details.face-fallback summary").click();
   await page.getByRole("button", { name: "Top, front edge right" }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
 });
@@ -58,12 +59,87 @@ test("a touch drag and a rotated view still turn the layer the finger follows", 
   await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), [move!])));
 });
 
+test("a short drag explains itself and does not change the cube", async ({ page }) => {
+  await page.getByRole("button", { name: "Turn a face" }).click();
+  const { box } = await frame(page);
+  const from = projectToScreen({ x: 0, y: 0, z: 1.4 }, box.width, box.height, HOME_THETA, HOME_PHI);
+  const before = await page.getByTestId("lesson-facelets").textContent();
+  await mouseDrag(page, box, from, { x: from.x + 8, y: from.y });
+  await expect(page.getByRole("status").filter({ hasText: "Too short to turn a face" })).toBeVisible();
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(before ?? "");
+});
+
+test("the inverse of a lesson move restores the counter, and a wrong move does not", async ({ page }) => {
+  await page.getByRole("button", { name: "Scramble" }).click();
+  const step = page.getByTestId("lesson-step");
+  await expect(step).toHaveText(/Step 1 of/, { timeout: 20_000 });
+  const stepBefore = await step.textContent();
+  const faceletsBefore = await page.getByTestId("lesson-facelets").textContent();
+  const nextLabel = (await page.getByRole("button", { name: /^Next/ }).textContent()) ?? "";
+  const move = nextLabel.split("·")[1]?.trim() ?? "";
+  expect(FACE_BUTTON[move]).toBeTruthy();
+  await page.locator("details.face-fallback summary").click();
+  await page.getByRole("button", { name: `${FACE_BUTTON[move]} ${move}`, exact: true }).click();
+  await expect(step).not.toHaveText(stepBefore ?? "", { timeout: 15_000 });
+  await expect(page.getByTestId("lesson-facelets")).not.toHaveText(faceletsBefore ?? "");
+  await page.getByRole("button", { name: `${FACE_BUTTON[invert(move)]} ${invert(move)}`, exact: true }).click();
+  await expect(step).toHaveText(stepBefore ?? "", { timeout: 15_000 });
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsBefore ?? "");
+  await expect(page.getByRole("button", { name: /^Next/ })).toHaveText(nextLabel);
+  const wrong = Object.keys(FACE_BUTTON).find((item) => item !== move && item !== invert(move)) ?? "F";
+  await page.getByRole("button", { name: `${FACE_BUTTON[wrong]} ${wrong}`, exact: true }).click();
+  await page.getByRole("button", { name: `${FACE_BUTTON[wrong]} ${wrong}`, exact: true }).click();
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsBefore ?? "");
+  await expect(step).toHaveText(stepBefore ?? "");
+  await expect(page.getByRole("status").filter({ hasText: "not the next lesson move" })).toBeVisible();
+});
+
+test("an upward drag on the right face turns that face, including after the view rotates", async ({ page }) => {
+  await page.getByRole("button", { name: "Turn a face" }).click();
+  const turned = faceletsToString(applyMoves(solvedBytes(), ["R"]));
+  const { box } = await frame(page);
+  const home = projectToScreen({ x: 1.48, y: 0, z: 0 }, box.width, box.height, HOME_THETA, HOME_PHI);
+  await mouseDrag(page, box, home, { x: home.x, y: home.y - 50 });
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(turned, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(page.getByText("This cube is solved")).toBeVisible();
+  await page.getByRole("button", { name: "Rotate view" }).click();
+  await mouseDrag(page, box, { x: box.width * 0.55, y: box.height * 0.5 }, { x: box.width * 0.55 + 70, y: box.height * 0.5 });
+  const view = orbitBy(HOME_THETA, HOME_PHI, 70, 0);
+  await page.getByRole("button", { name: "Turn a face" }).click();
+  const shifted = projectToScreen({ x: 1.48, y: 0, z: 0 }, box.width, box.height, view.theta, view.phi);
+  await mouseDrag(page, box, shifted, { x: shifted.x, y: shifted.y - 55 });
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(turned, { timeout: 15_000 });
+});
+
 test("face buttons turn the held cube and the opposite button undoes it", async ({ page }) => {
+  await page.locator("details.face-fallback summary").click();
   await page.getByRole("button", { name: "Right, front edge up" }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), ["R"])), { timeout: 15_000 });
   await page.getByRole("button", { name: "Right, front edge down" }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
 });
+
+const FACE_BUTTON: Record<string, string> = {
+  U: "Top, front edge left",
+  "U'": "Top, front edge right",
+  F: "Front, clockwise",
+  "F'": "Front, anticlockwise",
+  R: "Right, front edge up",
+  "R'": "Right, front edge down",
+  L: "Left, front edge down",
+  "L'": "Left, front edge up",
+  D: "Bottom, front edge right",
+  "D'": "Bottom, front edge left",
+  B: "Back, top edge left",
+  "B'": "Back, top edge right",
+};
+
+function invert(move: string): string {
+  if (move.endsWith("2")) return move;
+  if (move.endsWith("'")) return move[0] ?? move;
+  return `${move}'`;
+}
 
 function expectedMove(
   theta: number,
@@ -73,7 +149,7 @@ function expectedMove(
   position: { x: number; y: number; z: number },
   normal: { x: number; y: number; z: number },
 ) {
-  return resolveTurn(position, normal, dragInCubeSpace(dx, dy, theta, phi), cameraBasis(theta, phi).up);
+  return resolveTurn(position, normal, dragInCubeSpace(dx, dy, theta, phi), cameraBasis(theta, phi).up, cameraBasis(theta, phi).forward).move;
 }
 
 async function frame(page: Page) {
