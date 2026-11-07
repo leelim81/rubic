@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { COLORS, type ColorName, type Face, faceletsToString } from "../cube/model";
-import { nameFromCanonical, sampleFaceGrid, type Lab, type Raster } from "../scan/color";
+import { FACE_SAMPLE_MARGIN, nameFromCanonical, sampleFaceGrid, type Lab, type Raster } from "../scan/color";
+import { propagateCentreNames } from "../scan/calibrate";
 import { CAPTURES, reconstructCube } from "../scan/mapping";
 import { applyOrientation, validateBytes, type OrientationFix } from "../cube/validate";
 import { CubeView } from "./CubeView";
@@ -94,7 +95,7 @@ export function ScanFlow({ onCancel, onAccept }: { onCancel: () => void; onAccep
   }
 
   function storeFace(image: ImageData) {
-    const margin = Math.round(Math.min(image.width, image.height) * 0.12);
+    const margin = Math.round(Math.min(image.width, image.height) * FACE_SAMPLE_MARGIN);
     const patches = sampleFaceGrid(image as Raster, {
       x: margin,
       y: margin,
@@ -127,7 +128,8 @@ export function ScanFlow({ onCancel, onAccept }: { onCancel: () => void; onAccep
       const sticker = next[index];
       if (!sticker) return value;
       next[index] = { ...sticker, name, confirmed: true, touched: true, uncertain: false };
-      return { ...value, [capture.face]: next };
+      const updated = { ...value, [capture.face]: next };
+      return index === 4 ? propagateCentreNames(updated) : updated;
     });
   }
 
@@ -138,7 +140,7 @@ export function ScanFlow({ onCancel, onAccept }: { onCancel: () => void; onAccep
       setPhase("intro");
       return;
     }
-    setDraft((value) => reclassify(value));
+    setDraft((value) => propagateCentreNames(value));
     setPhase("review");
     setConfirmedLook(false);
   }
@@ -162,7 +164,7 @@ export function ScanFlow({ onCancel, onAccept }: { onCancel: () => void; onAccep
             <button type="button" onClick={() => void startCamera()}>Use camera</button>
             <label className="file">
               Upload a photo
-              <input type="file" accept="image/*" capture="environment" onChange={(event) => onFile(event.target.files?.[0])} />
+              <input data-testid="scan-upload" type="file" accept="image/*" capture="environment" onChange={(event) => onFile(event.target.files?.[0])} />
             </label>
           </div>
         </div>
@@ -178,7 +180,7 @@ export function ScanFlow({ onCancel, onAccept }: { onCancel: () => void; onAccep
             <button type="button" onClick={shootFromVideo} disabled={Boolean(streamError)}>Capture</button>
             <label className="file">
               Upload instead
-              <input type="file" accept="image/*" onChange={(event) => onFile(event.target.files?.[0])} />
+              <input data-testid="scan-upload" type="file" accept="image/*" onChange={(event) => onFile(event.target.files?.[0])} />
             </label>
             <button type="button" className="ghost" onClick={() => { stopCamera(streamRef.current); setPhase("intro"); }}>Back</button>
           </div>
@@ -187,6 +189,7 @@ export function ScanFlow({ onCancel, onAccept }: { onCancel: () => void; onAccep
       {phase === "fix" && current ? (
         <div>
           <p>Tap any sticker, including the centre, if the colour is wrong. Dashed stickers are uncertain and need a tap before you continue. Nothing is uploaded.</p>
+          <p className="quiet">Centre stickers are this cube&apos;s colour references. Changing a centre&apos;s name renames every untouched sticker whose sampled colour is closest to that centre, including stickers on faces you already kept. Stickers you set yourself stay as you set them.</p>
           <StickerGrid stickers={current} selected={selected} onSelect={setSelected} />
           <Palette onPick={(name) => paint(selected, name)} />
           <div className="row">
@@ -245,6 +248,7 @@ function Review({
   return (
     <div className="review">
       <p role="status">{message}</p>
+      <p className="sr-only" data-testid="scan-facelets">{facelets ?? ""}</p>
       <div className="review-grid">
         {CAPTURES.map((capture) => (
           <div key={capture.face} className="review-face">
@@ -320,38 +324,6 @@ function HoldDiagram({ step }: { step: number }) {
       </defs>
     </svg>
   );
-}
-
-function reclassify(draft: Record<Face, DraftSticker[] | null>): Record<Face, DraftSticker[] | null> {
-  const centres = CAPTURES.map((capture) => draft[capture.face]?.[4]?.lab).filter((lab): lab is Lab => Boolean(lab));
-  if (centres.length < 6) return draft;
-  const names = CAPTURES.map((capture) => draft[capture.face]?.[4]?.name ?? "white");
-  const next = { ...draft };
-  for (const capture of CAPTURES) {
-    const face = draft[capture.face];
-    if (!face) continue;
-    next[capture.face] = face.map((sticker, index) => {
-      if (sticker.touched) return sticker;
-      const ranked = centres
-        .map((centre, centreIndex) => ({ centreIndex, distance: distance(sticker.lab, centre) }))
-        .sort((a, b) => a.distance - b.distance);
-      const best = ranked[0]!;
-      const second = ranked[1] ?? best;
-      const gap = second.distance <= 0.0001 ? 0 : (second.distance - best.distance) / second.distance;
-      const uncertain = index === 4 ? sticker.uncertain : gap < 0.18 || best.distance > 0.22;
-      return {
-        ...sticker,
-        name: names[best.centreIndex] ?? sticker.name,
-        uncertain,
-        confirmed: !uncertain,
-      };
-    });
-  }
-  return next;
-}
-
-function distance(left: Lab, right: Lab): number {
-  return Math.hypot((left.L - right.L) * 0.28, left.a - right.a, left.b - right.b);
 }
 
 function buildReview(draft: Record<Face, DraftSticker[] | null>): { facelets: string | null; solvable: boolean; message: string; fixes: OrientationFix[] } {

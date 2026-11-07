@@ -7,13 +7,27 @@ import {
   solvedBytes,
   stringToFacelets,
 } from "../src/cube/model";
-import { classifyAgainstCentres, nameFromCanonical, paintSyntheticFace, rgbToLab, rotateNine, sampleFaceGrid } from "../src/scan/color";
+import { FACE_SAMPLE_MARGIN, classifyAgainstCentres, nameFromCanonical, paintSyntheticFace, rgbToLab, rotateNine, sampleFaceGrid } from "../src/scan/color";
 import { COLORS, type ColorName } from "../src/cube/model";
 import { photographCube, reconstructCube } from "../src/scan/mapping";
 import { validateBytes } from "../src/cube/validate";
 import { CANONICAL_RGB } from "../src/scan/color";
 
 describe("scan mapping", () => {
+  it("reads painted photos of a scramble back to the same colours", () => {
+    const cube = applyMoves(solvedBytes(), randomScramble(mulberry32(7), 12));
+    const photos = photographCube(cube);
+    for (const colours of Object.values(photos)) {
+      const raster = paintSyntheticFace(colours, { size: 240, marginRatio: FACE_SAMPLE_MARGIN, noise: 4, seed: 2 });
+      const margin = Math.round(240 * FACE_SAMPLE_MARGIN);
+      const patches = sampleFaceGrid(raster, { x: margin, y: margin, width: 240 - margin * 2, height: 240 - margin * 2 });
+      patches.forEach((patch, index) => {
+        expect(nameFromCanonical(patch.lab).name).toBe(colours[index]);
+      });
+    }
+    expect(faceletsToString(reconstructCube(photos))).toBe(faceletsToString(cube));
+  });
+
   it("round-trips scrambled cubes through the six guided photos", () => {
     for (let seed = 1; seed <= 20; seed++) {
       const cube = applyMoves(solvedBytes(), randomScramble(mulberry32(seed), 18));
@@ -47,7 +61,7 @@ describe("sticker colours", () => {
       for (const gradient of [0, 0.35]) {
         const colours = [...COLORS, ...COLORS, ...COLORS].slice(0, 9) as ColorName[];
         const raster = paintSyntheticFace(colours, { tint, gradient, noise: 8, seed: 7 });
-        const margin = Math.round(raster.width * 0.08);
+        const margin = Math.round(raster.width * FACE_SAMPLE_MARGIN);
         const rect = { x: margin, y: margin, width: raster.width - margin * 2, height: raster.height - margin * 2 };
         const patches = sampleFaceGrid(raster, rect);
         const centres = COLORS.map((colour) => {

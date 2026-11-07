@@ -63,7 +63,7 @@ export class CubeScene {
   private frame = 0;
   private theta = 0.62;
   private phi = 1.02;
-  private radius = 6.4;
+  private radius = 11;
   private readonly homeTheta = 0.62;
   private readonly homePhi = 1.02;
   private dragging = false;
@@ -264,8 +264,21 @@ export class CubeScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / Math.max(1, height);
+    this.fitDistance();
     this.camera.updateProjectionMatrix();
+    this.updateCamera();
   };
+
+  /** Pull the camera back until the cube's bounding sphere fits both axes, including while a layer turns. */
+  private fitDistance() {
+    const aspect = Math.max(0.45, this.camera.aspect || 1);
+    const vFov = (34 * Math.PI) / 180;
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+    const bound = 2.9;
+    const distV = bound / Math.sin(vFov / 2);
+    const distH = bound / Math.sin(hFov / 2);
+    this.radius = Math.max(distV, distH) * 1.14;
+  }
 
   private updateCamera() {
     const x = this.radius * Math.sin(this.phi) * Math.sin(this.theta);

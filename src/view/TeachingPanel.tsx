@@ -42,7 +42,9 @@ export function TeachingPanel({ facelets, chunk, suffix, doneInChunk, solved }: 
     return faceletsToString(applyMoves(stringToFacelets(facelets), suffix.slice(0, frame)));
   }, [facelets, suffix, frame]);
 
-  const move = suffix[Math.min(frame, Math.max(0, suffix.length - 1))] ?? "";
+  const shown = Math.min(frame === 0 ? 0 : frame - 1, Math.max(0, suffix.length - 1));
+  const move = suffix[shown] ?? "";
+  const trick = chunk ? chunk.fingertricks[doneInChunk + shown] : "";
 
   return (
     <section className="panel teaching" aria-labelledby="teaching-title">
@@ -82,13 +84,13 @@ export function TeachingPanel({ facelets, chunk, suffix, doneInChunk, solved }: 
             </div>
             <div className="demo-side">
               {move ? <FingerCue move={move} /> : null}
-              <p className="trick">{chunk.fingertricks[doneInChunk + Math.max(0, frame - 1)] ?? chunk.fingertricks[doneInChunk] ?? "Follow the move letters. They refer to the hold, not the camera."}</p>
+              <p className="trick">{trick || "Follow the move letters. They refer to the hold, not the camera."}</p>
               <div className="transport" role="group" aria-label="Demonstration playback">
                 <button type="button" onClick={() => setPlaying((value) => !value)}>{playing ? "Pause" : "Play"}</button>
                 <button type="button" onClick={() => { setPlaying(false); setFrame(0); }}>Repeat</button>
                 <label>
                   Speed
-                  <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))} aria-label="Demonstration speed">
+                  <select className="speed" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} aria-label="Demonstration speed">
                     <option value={0.6}>0.6×</option>
                     <option value={1}>1×</option>
                     <option value={1.6}>1.6×</option>

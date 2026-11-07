@@ -11,6 +11,9 @@ export interface SampledPatch {
   rgb: [number, number, number];
 }
 
+/** Fraction of the photo left as border around the face. The scanner samples this same rectangle. */
+export const FACE_SAMPLE_MARGIN = 0.12;
+
 /** Canonical sticker colours used only to name a centre, not to classify the other stickers. */
 export const CANONICAL_RGB: Record<ColorName, [number, number, number]> = {
   white: [242, 242, 242],
@@ -133,20 +136,21 @@ export function sampleFaceGrid(raster: Raster, rect: { x: number; y: number; wid
 
 export function paintSyntheticFace(
   colours: ColorName[],
-  options?: { tint?: [number, number, number]; gradient?: number; noise?: number; seed?: number; size?: number },
+  options?: { tint?: [number, number, number]; gradient?: number; noise?: number; seed?: number; size?: number; marginRatio?: number },
 ): Raster {
   const size = options?.size ?? 180;
   const tint = options?.tint ?? [1, 1, 1];
   const gradient = options?.gradient ?? 0;
   const noise = options?.noise ?? 0;
   const seed = options?.seed ?? 1;
+  const marginRatio = options?.marginRatio ?? FACE_SAMPLE_MARGIN;
   const data = new Uint8ClampedArray(size * size * 4);
   let noiseState = seed >>> 0;
   const rand = () => {
     noiseState = (Math.imul(1664525, noiseState) + 1013904223) >>> 0;
     return noiseState / 4294967296;
   };
-  const margin = Math.round(size * 0.08);
+  const margin = Math.round(size * marginRatio);
   const span = size - margin * 2;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {

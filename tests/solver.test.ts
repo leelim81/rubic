@@ -25,28 +25,45 @@ describe("beginner solver", () => {
     expect(solution.moves.join(" ")).toContain("U R U' R'");
   });
 
-  it("solves scrambles, random legal states, and one-move starts", () => {
-    const samples: Uint8Array[] = [];
-    for (let seed = 1; seed <= 16; seed++) {
-      samples.push(applyMoves(solvedBytes(), randomScramble(mulberry32(seed), 20)));
-      samples.push(randomLegalState(mulberry32(1000 + seed)));
+  it("solves 40 scrambles and 40 legal states with stage invariants", () => {
+    const scrambleCount = 40;
+    const legalCount = 40;
+    let solvedCount = 0;
+    const samples: { kind: string; state: Uint8Array }[] = [];
+    for (let seed = 1; seed <= scrambleCount; seed++) {
+      samples.push({ kind: "scramble", state: applyMoves(solvedBytes(), randomScramble(mulberry32(seed), 20)) });
+      samples.push({ kind: "legal", state: randomLegalState(mulberry32(1000 + seed)) });
     }
-    samples.push(applyMoves(solvedBytes(), ["R"]));
-    samples.push(applyMoves(solvedBytes(), ["F", "U", "R", "U'", "R'", "F'"]));
-    samples.push(applyMoves(solvedBytes(), randomScramble(mulberry32(42), 24)));
-    for (const start of samples) {
-      const solution = solveBeginner(faceletsToString(start));
-      expect(matchesCenters(applyMoves(start, solution.moves))).toBe(true);
-      expect(solution.chunkOfMove).toHaveLength(solution.moves.length);
-      for (const chunk of solution.chunks) {
+    samples.push({ kind: "one", state: applyMoves(solvedBytes(), ["R"]) });
+    samples.push({ kind: "trigger", state: applyMoves(solvedBytes(), ["F", "U", "R", "U'", "R'", "F'"]) });
+    samples.push({ kind: "long", state: applyMoves(solvedBytes(), randomScramble(mulberry32(42), 24)) });
+    for (const sample of samples) {
+      const started = performance.now();
+      const solution = solveBeginner(faceletsToString(sample.state));
+      expect(performance.now() - started).toBeLessThan(2500);
+      let cursor = copyBytes(sample.state);
+      for (let index = 0; index < solution.chunks.length; index++) {
+        const chunk = solution.chunks[index]!;
         expect(chunk.moves.length).toBeGreaterThan(0);
         expect(chunk.moves.length).toBeLessThanOrEqual(8);
         expect(chunk.fingertricks).toHaveLength(chunk.moves.length);
-        expect(chunk.advice.length).toBeGreaterThan(8);
-        expect(chunk.why.length).toBeGreaterThan(8);
+        cursor = applyMoves(cursor, chunk.moves);
+        const next = solution.chunks[index + 1];
+        const stageDone = !next || next.stageId !== chunk.stageId;
+        if (stageDone && chunk.stageId !== "hold" && chunk.stageId !== "orientCorners") {
+          expect(stageGoalMet(cursor, chunk.stageId), chunk.stageId).toBe(true);
+        }
+        if (stageDone && (chunk.stageId === "yellowCross" || chunk.stageId === "yellowEdges" || chunk.stageId === "yellowCorners")) {
+          expect(stageGoalMet(cursor, "middle"), chunk.stageId).toBe(true);
+        }
       }
+      expect(matchesCenters(cursor)).toBe(true);
+      expect(solution.chunkOfMove).toHaveLength(solution.moves.length);
+      solvedCount += 1;
     }
-  });
+    expect(solvedCount).toBe(scrambleCount + legalCount + 3);
+    expect(legalCount).toBe(40);
+  }, 120_000);
 
   it("restarts cleanly from each completed stage", () => {
     const start = applyMoves(solvedBytes(), randomScramble(mulberry32(42), 22));

@@ -26,10 +26,10 @@ test("scramble, next, back, and demonstration stay in step", async ({ page }, te
   await expect(page.getByText(/Move 2 of/)).toBeVisible();
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByText(before ?? "Move 1 of")).toBeVisible();
+  await page.screenshot({ path: testInfo.project.name === "mobile" ? "/tmp/rubic-mobile-lesson.png" : "/tmp/rubic-desktop-lesson.png", fullPage: true });
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await page.waitForTimeout(400);
   await expect(page.getByText(/Move 1 of/)).toBeVisible();
-  await page.screenshot({ path: testInfo.project.name === "mobile" ? "/tmp/rubic-mobile-lesson.png" : "/tmp/rubic-desktop-lesson.png", fullPage: true });
 });
 
 test("reset returns to the solved empty state", async ({ page }) => {
