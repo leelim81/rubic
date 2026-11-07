@@ -71,15 +71,15 @@ test("scans a short legal cube and solves it through a stage change", async ({ p
   }
   await next.click();
   await expect(title).toHaveText(/White cross/);
-  await expect(page.getByTestId("lesson-step")).toHaveText("Step 2 of 2, move 1");
+  await expect(page.getByTestId("lesson-step")).toHaveText("Half turn R2: quarter 1 of 2. R twice, or R' twice.");
   await next.click();
   await expect(title).toHaveText(/Match the cross/);
   await expect(page.getByTestId("lesson-step")).toHaveText("Step 1 of 1, move 1");
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(title).toHaveText(/White cross/);
-  await expect(page.getByTestId("lesson-step")).toHaveText("Step 2 of 2, move 1");
+  await expect(page.getByTestId("lesson-step")).toHaveText("Half turn R2: quarter 1 of 2. R twice, or R' twice.");
   await page.getByRole("button", { name: "Play", exact: true }).click();
-  await expect(page.getByTestId("lesson-step")).toHaveText("Step 2 of 2, move 1");
+  await expect(page.getByTestId("lesson-step")).toHaveText("Half turn R2: quarter 1 of 2. R twice, or R' twice.");
   await expect(title).toHaveText(/White cross/);
   await next.click();
   await expect(title).toHaveText(/Match the cross/);

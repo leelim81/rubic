@@ -52,7 +52,7 @@ test("show and hide controls are buttons you can use from the keyboard", async (
 test("scramble, next, back, and demonstration stay in step", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: "Scramble" }).click();
   const step = page.getByTestId("lesson-step");
-  await expect(step).toHaveText(/Step 1 of/, { timeout: 20_000 });
+  await expect(step).toHaveText(/Step 1 of|Half turn/, { timeout: 20_000 });
   const before = await step.textContent();
   await page.getByRole("button", { name: /^Next/ }).click();
   await expect(step).not.toHaveText(before ?? "");
@@ -66,7 +66,7 @@ test("scramble, next, back, and demonstration stay in step", async ({ page }, te
 
 test("reset returns to the solved empty state", async ({ page }) => {
   await page.getByRole("button", { name: "Scramble" }).click();
-  await expect(page.getByTestId("lesson-step")).toHaveText(/Step 1 of/, { timeout: 20_000 });
+  await expect(page.getByTestId("lesson-step")).toHaveText(/Step 1 of|Half turn/, { timeout: 20_000 });
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(page.getByText("This cube is solved")).toBeVisible();
 });

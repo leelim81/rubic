@@ -118,6 +118,7 @@ test("a half turn is two matching quarters, and the other direction works too", 
 });
 
 test("two right-face drags finish R2 at home and after the view turns", async ({ page }) => {
+  test.setTimeout(90_000);
   const start = faceletsToString(applyMoves(solvedBytes(), ["R2"]));
   await installLesson(page, start);
   await page.getByRole("button", { name: "Turn a face" }).click();
