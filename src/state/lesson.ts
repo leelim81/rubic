@@ -8,6 +8,7 @@ export interface LessonSnapshot {
   chunks: TeachingChunk[];
   cursor: number;
   arrivedBy: string | null;
+  pending: PendingQuarter | null;
 }
 
 export interface Lesson {
@@ -21,6 +22,13 @@ export interface Lesson {
   notice: string | null;
   /** The manual turn that created this lesson from an older one, if any. Its inverse restores that lesson. */
   arrivedBy: string | null;
+  /** First quarter of a half turn that is still waiting for the same quarter again. */
+  pending: PendingQuarter | null;
+}
+
+export interface PendingQuarter {
+  move: string;
+  intent: "do" | "undo";
 }
 
 export function emptyLesson(solved: string): Lesson {
@@ -34,12 +42,14 @@ export function emptyLesson(solved: string): Lesson {
     history: [],
     notice: null,
     arrivedBy: null,
+    pending: null,
   };
 }
 
 export function currentFacelets(lesson: Lesson): string {
-  const state = applyMoves(stringToFacelets(lesson.start), lesson.moves.slice(0, lesson.cursor));
-  return faceletsToString(state);
+  const moves = lesson.moves.slice(0, lesson.cursor);
+  if (lesson.pending) moves.push(lesson.pending.move);
+  return faceletsToString(applyMoves(stringToFacelets(lesson.start), moves));
 }
 
 export function snapshot(lesson: Lesson): LessonSnapshot {
@@ -50,6 +60,7 @@ export function snapshot(lesson: Lesson): LessonSnapshot {
     chunks: lesson.chunks,
     cursor: lesson.cursor,
     arrivedBy: lesson.arrivedBy,
+    pending: lesson.pending,
   };
 }
 
@@ -64,6 +75,7 @@ export function withSolution(lesson: Lesson, start: string, solution: Solution, 
     busy: false,
     notice,
     arrivedBy: null,
+    pending: null,
   };
 }
 
@@ -107,28 +119,76 @@ export function branchFrom(lesson: Lesson, facelets: string, solution: Solution,
   };
 }
 
-export type TurnChoice = "forward" | "back" | "reject" | "branch";
+export type TurnChoice = "forward" | "back" | "reject" | "branch" | "start-half" | "finish-half" | "start-undo" | "finish-undo" | "cancel-pending";
 
 /**
  * How a manual turn relates to the lesson.
- * The next scripted move advances. The inverse of the move just done goes back on the same lesson.
- * Any other turn during a lesson is refused, so the counter and the cube stay together.
- * A turn with no scripted move waiting starts a new lesson that its inverse can undo.
+ * A quarter that matches the next move advances. A face half turn (R2 and the rest) is two
+ * quarters in the same direction, either R then R or R' then R'. The opposite of the first
+ * quarter cancels it. A different face is refused, so the counter and the cube stay together.
  */
 export function decideTurn(lesson: Lesson, move: string): TurnChoice {
+  const pending = lesson.pending;
+  if (pending && move === pending.move) return pending.intent === "do" ? "finish-half" : "finish-undo";
+  if (pending && move === invertMove(pending.move)) return "cancel-pending";
+  if (pending) return "reject";
   const next = lesson.moves[lesson.cursor];
   if (next && move === next) return "forward";
+  if (isFaceHalf(next) && isQuarterOf(move, next)) return "start-half";
   const previous = lesson.cursor > 0 ? lesson.moves[lesson.cursor - 1] : undefined;
   if (previous && move === invertMove(previous)) return "back";
+  if (isFaceHalf(previous) && isQuarterOf(move, previous)) return "start-undo";
   if (lesson.arrivedBy && lesson.cursor === 0 && move === invertMove(lesson.arrivedBy)) return "back";
   if (next) return "reject";
   return "branch";
+}
+
+export function isFaceHalf(move: string | undefined): move is string {
+  return !!move && /^[UDFBLR]2$/.test(move);
+}
+
+export function isQuarterOf(move: string, half: string): boolean {
+  return isFaceHalf(half) && (move === half[0] || move === `${half[0]}'`);
 }
 
 export function invertMove(move: string): string {
   if (!move || move.endsWith("2")) return move;
   if (move.endsWith("'")) return move[0]!;
   return `${move}'`;
+}
+
+/** State change for a manual turn. `animate` is the move to show, or null when the cube must stay. */
+export function commitTurn(lesson: Lesson, move: string): { lesson: Lesson; animate: string | null } {
+  const choice = decideTurn(lesson, move);
+  const ready = { ...lesson, busy: false, notice: null as string | null };
+  switch (choice) {
+    case "reject": {
+      const next = lesson.moves[lesson.cursor];
+      const half = isFaceHalf(next) ? ` Do ${next?.[0]} twice, or ${next?.[0]}' twice.` : "";
+      const mid = lesson.pending ? ` Finish ${lesson.pending.move}, or take that quarter back.` : "";
+      return {
+        lesson: { ...lesson, notice: `${move} is not the next lesson move, so the cube stays as it is.${next ? ` Next is ${next}.` : ""}${half}${mid}` },
+        animate: null,
+      };
+    }
+    case "start-half":
+      return { lesson: { ...ready, pending: { move, intent: "do" } }, animate: move };
+    case "start-undo":
+      return { lesson: { ...ready, pending: { move, intent: "undo" } }, animate: move };
+    case "cancel-pending":
+      return { lesson: { ...ready, pending: null }, animate: invertMove(lesson.pending?.move ?? move) };
+    case "finish-half":
+      return { lesson: stepForward({ ...ready, pending: null }), animate: move };
+    case "finish-undo":
+      return { lesson: stepBack({ ...ready, pending: null }), animate: move };
+    case "forward":
+      return { lesson: stepForward(ready), animate: lesson.moves[lesson.cursor] ?? null };
+    case "back":
+      if (lesson.cursor === 0) return { lesson: stepBack(ready), animate: lesson.arrivedBy ? invertMove(lesson.arrivedBy) : null };
+      return { lesson: stepBack(ready), animate: invertMove(lesson.moves[lesson.cursor - 1] ?? "") || null };
+    case "branch":
+      return { lesson, animate: move };
+  }
 }
 
 export function upcoming(lesson: Lesson): { chunk: TeachingChunk; suffix: string[]; doneInChunk: number } | null {
@@ -159,6 +219,18 @@ export function progressLabel(lesson: Lesson): { stage: string; step: string } {
   const stepIndex = Math.max(0, firstMoves.findIndex((item) => item.chunkIndex === lesson.chunkOfMove[lesson.cursor]));
   const chunkIndex = lesson.chunkOfMove[lesson.cursor] ?? 0;
   const moveInChunk = lesson.chunkOfMove.slice(0, lesson.cursor + 1).filter((item) => item === chunkIndex).length;
+  const next = lesson.moves[lesson.cursor];
+  const previous = lesson.cursor > 0 ? lesson.moves[lesson.cursor - 1] : undefined;
+  if (lesson.pending?.intent === "do" && isFaceHalf(next)) {
+    return { stage, step: `Half turn ${next}: 1 of 2. Do ${lesson.pending.move} again.` };
+  }
+  if (lesson.pending?.intent === "undo" && isFaceHalf(previous)) {
+    return { stage, step: `Taking back ${previous}: 1 of 2. Do ${lesson.pending.move} again.` };
+  }
+  if (isFaceHalf(next)) {
+    const face = next[0];
+    return { stage, step: `Half turn ${next}: quarter 1 of 2. ${face} twice, or ${face}' twice.` };
+  }
   return {
     stage,
     step: `Step ${stepIndex + 1} of ${Math.max(1, firstMoves.length)}, move ${moveInChunk}`,
