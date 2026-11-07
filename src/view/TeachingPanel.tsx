@@ -78,7 +78,7 @@ export function TeachingPanel({ facelets, chunk, suffix, doneInChunk, solved }: 
                 facelets={demoFacelets}
                 highlight={frame === 0 ? chunk.focus : []}
                 letters
-                turns={false}
+                gesture="off"
                 label="Demonstration cube. Playing it does not change your lesson."
               />
             </div>

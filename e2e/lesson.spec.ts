@@ -12,9 +12,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterEach(async ({ page }) => {
-  const errors = ((page as unknown as { __errors?: string[] }).__errors ?? []).filter(
-    (error) => !error.includes("favicon") && !error.includes("Failed to load resource"),
-  );
+  const errors = (page as unknown as { __errors?: string[] }).__errors ?? [];
   expect(errors).toEqual([]);
 });
 
@@ -24,7 +22,7 @@ test("scramble, next, back, and demonstration stay in step", async ({ page }, te
   const before = await page.getByText(/Move 1 of/).textContent();
   await page.getByRole("button", { name: /^Next/ }).click();
   await expect(page.getByText(/Move 2 of/)).toBeVisible();
-  await page.getByRole("button", { name: "Back" }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page.getByText(before ?? "Move 1 of")).toBeVisible();
   await page.screenshot({ path: testInfo.project.name === "mobile" ? "/tmp/rubic-mobile-lesson.png" : "/tmp/rubic-desktop-lesson.png", fullPage: true });
   await page.getByRole("button", { name: "Play", exact: true }).click();
@@ -54,8 +52,9 @@ test("manual colours can reject an impossible cube", async ({ page }, testInfo) 
 
 test("scan instructions explain six photos", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: "Scan" }).click();
-  await expect(page.getByText("Photograph all six faces")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Use camera" })).toBeVisible();
+  await expect(page.getByText("Face 1 of 6")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Capture photo" })).toBeVisible();
+  await expect(page.getByText(/close this scan and start again/i)).toBeVisible();
   if (testInfo.project.name === "desktop") {
     await page.screenshot({ path: "/tmp/rubic-scan.png", fullPage: true });
   }

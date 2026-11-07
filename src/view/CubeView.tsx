@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { CubeScene } from "./cubeScene";
+import { CubeScene, type CubeGesture } from "./cubeScene";
 
 export interface CubeHandle {
   animate: (move: string, nextFacelets: string) => Promise<void>;
@@ -10,14 +10,14 @@ interface Props {
   facelets: string;
   highlight?: number[];
   letters: boolean;
-  turns: boolean;
+  gesture: CubeGesture;
   label: string;
   onTurn?: (move: string) => void;
   onViewShift?: (shifted: boolean) => void;
 }
 
 export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
-  { facelets, highlight = [], letters, turns, label, onTurn, onViewShift },
+  { facelets, highlight = [], letters, gesture, label, onTurn, onViewShift },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -27,7 +27,7 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const scene = new CubeScene(canvas, { reducedMotion: reduced, letters, turns, onTurn, onViewShift });
+    const scene = new CubeScene(canvas, { reducedMotion: reduced, letters, gesture, onTurn, onViewShift });
     sceneRef.current = scene;
     scene.setFacelets(facelets);
     scene.setHighlight(highlight);
@@ -40,8 +40,8 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   }, []);
 
   useEffect(() => {
-    sceneRef.current?.setOptions({ letters, turns, reducedMotion: reduced, onTurn, onViewShift });
-  }, [letters, turns, reduced, onTurn, onViewShift]);
+    sceneRef.current?.setOptions({ letters, gesture, reducedMotion: reduced, onTurn, onViewShift });
+  }, [letters, gesture, reduced, onTurn, onViewShift]);
 
   useEffect(() => {
     sceneRef.current?.setFacelets(facelets);
@@ -64,7 +64,7 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   return (
     <canvas
       ref={canvasRef}
-      className="cube-canvas"
+      className={`cube-canvas gesture-${gesture}`}
       role="img"
       aria-label={label}
     />

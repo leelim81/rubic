@@ -27,6 +27,7 @@ const STORAGE = "rubic-lesson-v1";
 export function App() {
   const [lesson, setLesson] = useState<Lesson>(() => loadLesson());
   const [letters, setLetters] = useState(true);
+  const [gesture, setGesture] = useState<"view" | "turn">("view");
   const [viewShift, setViewShift] = useState(false);
   const [mode, setMode] = useState<"learn" | "scan" | "manual" | "primer">("learn");
   const [error, setError] = useState<string | null>(null);
@@ -142,28 +143,47 @@ export function App() {
             <p>{labels.move}</p>
             <p>{labels.remaining}</p>
           </div>
+          <div className="gesture-toggle" role="group" aria-label="How a drag on the cube behaves">
+            <button type="button" className={gesture === "view" ? "on" : ""} aria-pressed={gesture === "view"} onClick={() => setGesture("view")}>Rotate view</button>
+            <button type="button" className={gesture === "turn" ? "on" : ""} aria-pressed={gesture === "turn"} onClick={() => setGesture("turn")}>Turn a face</button>
+          </div>
+          <p className="quiet" id="gesture-help">
+            {gesture === "view"
+              ? "Drag anywhere on the cube to look around. Pieces stay where they are."
+              : "Drag a sticker the way that layer should slide. One piece cannot turn by itself."}
+          </p>
           <div className="cube-frame">
             <CubeView
               ref={cubeRef}
               facelets={facelets}
               highlight={demo?.chunk.focus ?? []}
               letters={letters}
-              turns
+              gesture={gesture}
               label={cubeLabel(facelets, nextMove)}
               onTurn={(move) => void userTurn(move)}
               onViewShift={onViewShift}
             />
           </div>
+          <p className="sr-only" data-testid="lesson-facelets">{facelets}</p>
           <p className="hold-banner">{holdText(stringToFacelets(facelets))}</p>
-          {viewShift ? <p className="view-warning" role="status">You are looking from another angle. Moves still follow the hold above, not the direction on screen. <button type="button" onClick={() => cubeRef.current?.resetView()}>Reset view</button></p> : null}
+          {viewShift ? <p className="view-warning" role="status">The view has moved. Face buttons and lesson moves still use the hold above, not whichever side faces the screen. <button type="button" onClick={() => cubeRef.current?.resetView()}>Reset view</button></p> : null}
+          <div className="controls">
+            <button type="button" onClick={() => void go(-1)} disabled={lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0)}>Back</button>
+            <button type="button" className="primary" onClick={() => void go(1)} disabled={lesson.busy || loading || !nextMove}>Next{nextMove ? ` · ${nextMove}` : ""}</button>
+          </div>
+          <div className="face-pad" role="group" aria-label="Turn a face. These follow the hold, not the camera.">
+            {FACE_BUTTONS.map((button) => (
+              <button key={button.move} type="button" onClick={() => void userTurn(button.move)} disabled={lesson.busy || loading} title={button.accessible}>
+                {button.label} <span className="move-code">{button.move}</span>
+              </button>
+            ))}
+          </div>
           {lesson.notice ? <p className="notice" role="status">{lesson.notice}</p> : null}
           {error ? <p className="error" role="alert">{error}</p> : null}
           {loading ? <p className="quiet" role="status">Preparing the lesson… you can keep looking at the cube.</p> : null}
           {solved && lesson.moves.length === 0 ? <p className="lead">This cube is solved. Scramble it, or scan a physical cube, to start learning.</p> : null}
           {solved && lesson.cursor > 0 && lesson.cursor === lesson.moves.length ? <p className="lead">Solved. The last move finished the cube, and every centre matches its face.</p> : null}
-          <div className="controls">
-            <button type="button" onClick={() => void go(-1)} disabled={lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0)}>Back</button>
-            <button type="button" className="primary" onClick={() => void go(1)} disabled={lesson.busy || loading || !nextMove}>Next{nextMove ? ` · ${nextMove}` : ""}</button>
+          <div className="row secondary-actions">
             <button type="button" onClick={() => void load(faceletsToString(applyScramble()), null)} disabled={lesson.busy || loading}>Scramble</button>
             <button type="button" onClick={() => { setLesson(emptyLesson(SOLVED)); setError(null); }} disabled={lesson.busy}>Reset</button>
             <button type="button" onClick={() => setLesson((current) => ({ ...current, cursor: 0, notice: "Replaying from the start of this lesson." }))} disabled={lesson.busy || lesson.cursor === 0}>Replay lesson</button>
@@ -174,7 +194,7 @@ export function App() {
             Letter stickers (W Y R O B G) as well as colour
           </label>
           {reduced ? <p className="quiet">Reduced motion is on. Moves jump to the next state, and the move letter is still announced above.</p> : null}
-          <p className="quiet">Next does one move and assumes you do the same on your cube. It cannot see your hands. If you turn a different layer here, the lesson restarts from that position. Drag empty space to look around. Drag a sticker to turn a layer.</p>
+          <p className="quiet">Next does one lesson move. It cannot see your hands. A different face turn restarts the lesson from the cube as it is now.</p>
         </section>
         <TeachingPanel
           facelets={facelets}
@@ -273,6 +293,21 @@ function Primer({ onClose }: { onClose: () => void }) {
     </section>
   );
 }
+
+const FACE_BUTTONS: { move: string; label: string; accessible: string }[] = [
+  { move: "U", label: "Top, front edge left", accessible: "Turn the top face so its front edge moves left. Notation U." },
+  { move: "U'", label: "Top, front edge right", accessible: "Turn the top face so its front edge moves right. Notation U prime." },
+  { move: "F", label: "Front, clockwise", accessible: "Turn the front face clockwise, so its top edge moves right. Notation F." },
+  { move: "F'", label: "Front, anticlockwise", accessible: "Turn the front face anticlockwise, so its top edge moves left. Notation F prime." },
+  { move: "R", label: "Right, front edge up", accessible: "Turn the right face so its front edge moves up. Notation R." },
+  { move: "R'", label: "Right, front edge down", accessible: "Turn the right face so its front edge moves down. Notation R prime." },
+  { move: "L", label: "Left, front edge down", accessible: "Turn the left face so its front edge moves down. Notation L." },
+  { move: "L'", label: "Left, front edge up", accessible: "Turn the left face so its front edge moves up. Notation L prime." },
+  { move: "D", label: "Bottom, front edge right", accessible: "Turn the bottom face so its front edge moves right. Notation D." },
+  { move: "D'", label: "Bottom, front edge left", accessible: "Turn the bottom face so its front edge moves left. Notation D prime." },
+  { move: "B", label: "Back, top edge left", accessible: "Turn the back face so its top edge, seen from the front, moves left. Notation B." },
+  { move: "B'", label: "Back, top edge right", accessible: "Turn the back face so its top edge, seen from the front, moves right. Notation B prime." },
+];
 
 function invert(move: string): string {
   if (!move) return "";

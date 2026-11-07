@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { type ColorName, type Face, FACES, faceOffset, stringToFacelets } from "../cube/model";
 import { SLOTS } from "../cube/model";
-import { interpretDrag } from "./drag";
+import { cameraBasis, cameraDistance, HOME_PHI, HOME_THETA, ORBIT_SPEED, TURN_DRAG_PX, viewIsShifted } from "./camera";
+import { resolveTurn } from "./drag";
 
 const STICKER: Record<ColorName, string> = {
   white: "#f3f0e8",
@@ -46,10 +47,12 @@ interface Cubie {
   stickers: StickerMesh[];
 }
 
+export type CubeGesture = "view" | "turn" | "off";
+
 export interface CubeSceneOptions {
   reducedMotion: boolean;
   letters: boolean;
-  turns: boolean;
+  gesture: CubeGesture;
   onTurn?: (move: string) => void;
   onViewShift?: (shifted: boolean) => void;
 }
@@ -61,13 +64,11 @@ export class CubeScene {
   private cubies: Cubie[] = [];
   private stickers: StickerMesh[] = [];
   private frame = 0;
-  private theta = 0.62;
-  private phi = 1.02;
+  private theta = HOME_THETA;
+  private phi = HOME_PHI;
   private radius = 11;
-  private readonly homeTheta = 0.62;
-  private readonly homePhi = 1.02;
   private dragging = false;
-  private moved = false;
+  private down = { x: 0, y: 0 };
   private pointer = { x: 0, y: 0 };
   private hit: { position: THREE.Vector3; normal: THREE.Vector3 } | null = null;
   private highlight = new Set<number>();
@@ -98,7 +99,8 @@ export class CubeScene {
     this.resize();
     this.canvas.addEventListener("pointerdown", this.onDown);
     this.canvas.addEventListener("pointermove", this.onMove);
-    window.addEventListener("pointerup", this.onUp);
+    this.canvas.addEventListener("pointerup", this.onUp);
+    this.canvas.addEventListener("pointercancel", this.onCancel);
     this.frame = requestAnimationFrame(this.loop);
   }
 
@@ -134,8 +136,8 @@ export class CubeScene {
   }
 
   resetView() {
-    this.theta = this.homeTheta;
-    this.phi = this.homePhi;
+    this.theta = HOME_THETA;
+    this.phi = HOME_PHI;
     this.updateCamera();
     this.options.onViewShift?.(false);
   }
@@ -146,7 +148,8 @@ export class CubeScene {
     this.resizeObserver.disconnect();
     this.canvas.removeEventListener("pointerdown", this.onDown);
     this.canvas.removeEventListener("pointermove", this.onMove);
-    window.removeEventListener("pointerup", this.onUp);
+    this.canvas.removeEventListener("pointerup", this.onUp);
+    this.canvas.removeEventListener("pointercancel", this.onCancel);
     this.textures.forEach((texture) => texture.dispose());
     this.renderer.dispose();
   }
@@ -271,13 +274,7 @@ export class CubeScene {
 
   /** Pull the camera back until the cube's bounding sphere fits both axes, including while a layer turns. */
   private fitDistance() {
-    const aspect = Math.max(0.45, this.camera.aspect || 1);
-    const vFov = (34 * Math.PI) / 180;
-    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
-    const bound = 2.9;
-    const distV = bound / Math.sin(vFov / 2);
-    const distH = bound / Math.sin(hFov / 2);
-    this.radius = Math.max(distV, distH) * 1.14;
+    this.radius = cameraDistance(this.camera.aspect || 1);
   }
 
   private updateCamera() {
@@ -286,8 +283,7 @@ export class CubeScene {
     const z = this.radius * Math.sin(this.phi) * Math.cos(this.theta);
     this.camera.position.set(x, y, z);
     this.camera.lookAt(0, 0, 0);
-    const shifted = Math.hypot(this.theta - this.homeTheta, this.phi - this.homePhi) > 0.28;
-    this.options.onViewShift?.(shifted);
+    this.options.onViewShift?.(viewIsShifted(this.theta, this.phi));
   }
 
   private loop = () => {
@@ -297,35 +293,42 @@ export class CubeScene {
   };
 
   private onDown = (event: PointerEvent) => {
-    if (this.animating) return;
+    if (this.animating || this.options.gesture === "off") return;
     this.dragging = true;
-    this.moved = false;
+    this.down = { x: event.clientX, y: event.clientY };
     this.pointer = { x: event.clientX, y: event.clientY };
-    this.hit = this.options.turns ? this.pick(event) : null;
+    this.hit = this.options.gesture === "turn" ? this.pick(event) : null;
+    try {
+      this.canvas.setPointerCapture(event.pointerId);
+    } catch {
+      // Dispatched test events have no active pointer. The listeners still run.
+    }
   };
 
   private onMove = (event: PointerEvent) => {
-    if (!this.dragging || this.animating) return;
+    if (!this.dragging || this.animating || this.options.gesture !== "view") return;
     const dx = event.clientX - this.pointer.x;
     const dy = event.clientY - this.pointer.y;
-    if (!this.moved && dx * dx + dy * dy < 36) return;
-    this.moved = true;
-    if (this.hit && this.options.turns) {
-      const move = this.dragMove(dx, dy);
-      if (move) {
-        this.dragging = false;
-        this.hit = null;
-        this.options.onTurn?.(move);
-      }
-      return;
-    }
-    this.theta -= dx * 0.008;
-    this.phi = Math.min(2.6, Math.max(0.25, this.phi + dy * 0.008));
+    this.theta -= dx * ORBIT_SPEED;
+    this.phi = Math.min(2.6, Math.max(0.25, this.phi + dy * ORBIT_SPEED));
     this.pointer = { x: event.clientX, y: event.clientY };
     this.updateCamera();
   };
 
-  private onUp = () => {
+  private onUp = (event: PointerEvent) => {
+    if (!this.dragging) return;
+    const dx = event.clientX - this.down.x;
+    const dy = event.clientY - this.down.y;
+    const hit = this.hit;
+    this.dragging = false;
+    this.hit = null;
+    if (this.options.gesture !== "turn" || !hit || this.animating) return;
+    if (dx * dx + dy * dy < TURN_DRAG_PX * TURN_DRAG_PX) return;
+    const move = this.dragMove(dx, dy, hit);
+    if (move) this.options.onTurn?.(move);
+  };
+
+  private onCancel = () => {
     this.dragging = false;
     this.hit = null;
   };
@@ -346,15 +349,18 @@ export class CubeScene {
     return { position: cubie.home.clone(), normal: sticker.normal.clone() };
   }
 
-  private dragMove(dx: number, dy: number): string | null {
-    if (!this.hit) return null;
-    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
-    const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
-    const drag = right.multiplyScalar(dx).add(up.multiplyScalar(-dy));
-    return interpretDrag(
-      { x: this.hit.position.x, y: this.hit.position.y, z: this.hit.position.z },
-      { x: this.hit.normal.x, y: this.hit.normal.y, z: this.hit.normal.z },
-      { x: drag.x, y: drag.y, z: drag.z },
+  private dragMove(dx: number, dy: number, hit: { position: THREE.Vector3; normal: THREE.Vector3 }): string | null {
+    const { right, up } = cameraBasis(this.theta, this.phi);
+    const drag = {
+      x: right.x * dx + up.x * -dy,
+      y: right.y * dx + up.y * -dy,
+      z: right.z * dx + up.z * -dy,
+    };
+    return resolveTurn(
+      { x: hit.position.x, y: hit.position.y, z: hit.position.z },
+      { x: hit.normal.x, y: hit.normal.y, z: hit.normal.z },
+      drag,
+      up,
     );
   }
 }
