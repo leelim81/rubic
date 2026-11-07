@@ -4,6 +4,10 @@ A learning-first 3×3 lesson that runs as a static site at [https://leelim81.git
 
 The app teaches a beginner layer-by-layer method (white cross, white corners, second layer, yellow cross, matching the cross, placing corners, twisting corners). It solves whatever legal position you scramble or scan. It does not undo the scramble backwards, and it does not pretend a short computer search is mathematically optimal.
 
+Drag the cube in **Rotate view** to look around; that drag does not turn a layer. Switch to **Turn a face** and drag a sticker the way that layer should slide. A single piece cannot turn on its own. The buttons under the cube (`Top, front edge left`, and the rest) do the same turns without a drag, and they follow the hold even after the view has moved.
+
+A scan says **Face 1 of 6**, then one main button: **Capture photo**, then **Confirm colours & next face**, then **Review cube**, then **Start solving**. Drag the photo's corners onto the face before confirming. Uncertain colours, including a background that only looks like a sticker, have to be chosen by hand.
+
 ## Assumptions
 
 - Ordinary Western colour scheme only: white opposite yellow, red opposite orange, blue opposite green.
@@ -36,7 +40,7 @@ npm run test:e2e
 
 ## Deploy
 
-Push to `main` runs `.github/workflows/pages.yml`, which tests, builds, and deploys with GitHub Actions. The repository Pages source must be **GitHub Actions**. This token cannot enable that setting when it lacks administration rights.
+Push to `main` runs `.github/workflows/pages.yml`, which tests, builds, and deploys with GitHub Actions. The repository Pages source is **GitHub Actions**. The public site is https://leelim81.github.io/rubic/.
 
 ## Licence
 

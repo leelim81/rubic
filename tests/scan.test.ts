@@ -7,7 +7,7 @@ import {
   solvedBytes,
   stringToFacelets,
 } from "../src/cube/model";
-import { FACE_SAMPLE_MARGIN, classifyAgainstCentres, nameFromCanonical, paintSyntheticFace, rgbToLab, rotateNine, sampleFaceGrid } from "../src/scan/color";
+import { CANONICAL_DISTANCE_LIMIT, FACE_SAMPLE_MARGIN, classifyAgainstCentres, defaultFaceCrop, nameFromCanonical, paintInsetFace, paintSyntheticFace, rgbToLab, rotateNine, sampleFaceGrid, warpQuad, type NormPoint } from "../src/scan/color";
 import { COLORS, type ColorName } from "../src/cube/model";
 import { photographCube, reconstructCube } from "../src/scan/mapping";
 import { validateBytes } from "../src/cube/validate";
@@ -102,5 +102,25 @@ describe("sticker colours", () => {
     expect(validateBytes(cube).ok).toBe(false);
     photos.F[0] = "green";
     expect(validateBytes(reconstructCube(photos)).ok).toBe(true);
+  });
+
+  it("reads a face that does not fill the photo once the crop sits on it", () => {
+    const colours: ColorName[] = ["white", "yellow", "red", "orange", "blue", "green", "white", "red", "yellow"];
+    const raster = paintInsetFace(colours, 420, 300, { x: 90, y: 40, width: 210, height: 200 }, [40, 20, 70]);
+    const wrong = warpQuad(raster, defaultFaceCrop());
+    const wrongNames = sampleFaceGrid(wrong, { x: 0, y: 0, width: wrong.width, height: wrong.height }).map((patch) => nameFromCanonical(patch.lab));
+    expect(wrongNames.some((named) => named.distance > CANONICAL_DISTANCE_LIMIT || named.name !== colours[wrongNames.indexOf(named)])).toBe(true);
+    const crop: [NormPoint, NormPoint, NormPoint, NormPoint] = [
+      { x: 90 / 420, y: 40 / 300 },
+      { x: 300 / 420, y: 40 / 300 },
+      { x: 300 / 420, y: 240 / 300 },
+      { x: 90 / 420, y: 240 / 300 },
+    ];
+    const aligned = warpQuad(raster, crop);
+    const names = sampleFaceGrid(aligned, { x: 0, y: 0, width: aligned.width, height: aligned.height }).map((patch) => nameFromCanonical(patch.lab));
+    names.forEach((named, index) => {
+      expect(named.name).toBe(colours[index]);
+      expect(named.distance).toBeLessThan(CANONICAL_DISTANCE_LIMIT);
+    });
   });
 });

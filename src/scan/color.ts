@@ -54,7 +54,7 @@ export function labDistance(left: Lab, right: Lab): number {
   return Math.hypot(dL, da, db);
 }
 
-export function nameFromCanonical(lab: Lab): { name: ColorName; confidence: number } {
+export function nameFromCanonical(lab: Lab): { name: ColorName; confidence: number; distance: number } {
   const ranked = COLORS.map((name) => ({
     name,
     distance: labDistance(lab, rgbToLab(...CANONICAL_RGB[name])),
@@ -62,7 +62,17 @@ export function nameFromCanonical(lab: Lab): { name: ColorName; confidence: numb
   const best = ranked[0]!;
   const second = ranked[1]!;
   const confidence = second.distance <= 0.0001 ? 0 : (second.distance - best.distance) / second.distance;
-  return { name: best.name, confidence };
+  return { name: best.name, confidence, distance: best.distance };
+}
+
+/** Weighted distance used while comparing sticker hues. */
+export const CANONICAL_DISTANCE_LIMIT = 0.45;
+
+/** Full OKLab distance. A dark background can mimic a hue once lightness is ignored. */
+export const FULL_DISTANCE_LIMIT = 0.22;
+
+export function fullLabDistance(left: Lab, right: Lab): number {
+  return Math.hypot(left.L - right.L, left.a - right.a, left.b - right.b);
 }
 
 export interface ClassifiedSticker {
@@ -178,6 +188,111 @@ export function paintSyntheticFace(
 
 function clamp(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+export interface NormPoint {
+  x: number;
+  y: number;
+}
+
+/** Default crop matches the border left around a face that fills the photo. */
+export function defaultFaceCrop(): [NormPoint, NormPoint, NormPoint, NormPoint] {
+  const margin = FACE_SAMPLE_MARGIN;
+  return [
+    { x: margin, y: margin },
+    { x: 1 - margin, y: margin },
+    { x: 1 - margin, y: 1 - margin },
+    { x: margin, y: 1 - margin },
+  ];
+}
+
+/** Straighten a quadrilateral (top-left, top-right, bottom-right, bottom-left) into a square. */
+export function warpQuad(source: Raster, corners: [NormPoint, NormPoint, NormPoint, NormPoint], size = 180): Raster {
+  const pixels = corners.map((corner) => ({ x: corner.x * source.width, y: corner.y * source.height })) as [
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+  ];
+  const data = new Uint8ClampedArray(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = (x + 0.5) / size;
+      const v = (y + 0.5) / size;
+      const point = bilinear(pixels, u, v);
+      const rgb = sampleBilinear(source, point.x, point.y);
+      const offset = (y * size + x) * 4;
+      data[offset] = rgb[0];
+      data[offset + 1] = rgb[1];
+      data[offset + 2] = rgb[2];
+      data[offset + 3] = 255;
+    }
+  }
+  return { data, width: size, height: size };
+}
+
+/** Paint a face into an axis-aligned rectangle on a flat background. Coordinates are pixels. */
+export function paintInsetFace(
+  colours: ColorName[],
+  width: number,
+  height: number,
+  rect: { x: number; y: number; width: number; height: number },
+  background: [number, number, number],
+): Raster {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4;
+      data[offset + 3] = 255;
+      const inside = x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
+      if (!inside) {
+        data[offset] = background[0];
+        data[offset + 1] = background[1];
+        data[offset + 2] = background[2];
+        continue;
+      }
+      const col = Math.min(2, Math.floor(((x - rect.x) / rect.width) * 3));
+      const row = Math.min(2, Math.floor(((y - rect.y) / rect.height) * 3));
+      const [r, g, b] = CANONICAL_RGB[colours[row * 3 + col] ?? "white"];
+      data[offset] = r;
+      data[offset + 1] = g;
+      data[offset + 2] = b;
+    }
+  }
+  return { data, width, height };
+}
+
+function bilinear(
+  corners: [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }],
+  u: number,
+  v: number,
+): { x: number; y: number } {
+  const [topLeft, topRight, bottomRight, bottomLeft] = corners;
+  const top = { x: topLeft.x + (topRight.x - topLeft.x) * u, y: topLeft.y + (topRight.y - topLeft.y) * u };
+  const bottom = { x: bottomLeft.x + (bottomRight.x - bottomLeft.x) * u, y: bottomLeft.y + (bottomRight.y - bottomLeft.y) * u };
+  return { x: top.x + (bottom.x - top.x) * v, y: top.y + (bottom.y - top.y) * v };
+}
+
+function sampleBilinear(raster: Raster, x: number, y: number): [number, number, number] {
+  const x0 = Math.max(0, Math.min(raster.width - 1, Math.floor(x)));
+  const y0 = Math.max(0, Math.min(raster.height - 1, Math.floor(y)));
+  const x1 = Math.max(0, Math.min(raster.width - 1, x0 + 1));
+  const y1 = Math.max(0, Math.min(raster.height - 1, y0 + 1));
+  const tx = Math.max(0, Math.min(1, x - x0));
+  const ty = Math.max(0, Math.min(1, y - y0));
+  const sample = (px: number, py: number) => {
+    const offset = (py * raster.width + px) * 4;
+    return [raster.data[offset] ?? 0, raster.data[offset + 1] ?? 0, raster.data[offset + 2] ?? 0] as [number, number, number];
+  };
+  const a = sample(x0, y0);
+  const b = sample(x1, y0);
+  const c = sample(x0, y1);
+  const d = sample(x1, y1);
+  return [0, 1, 2].map((channel) => {
+    const top = a[channel]! * (1 - tx) + b[channel]! * tx;
+    const bottom = c[channel]! * (1 - tx) + d[channel]! * tx;
+    return Math.round(top * (1 - ty) + bottom * ty);
+  }) as [number, number, number];
 }
 
 export function rotateNine<T>(cells: T[], quarters: number): T[] {
