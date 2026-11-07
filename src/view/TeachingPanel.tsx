@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { applyMoves, faceletsToString, stringToFacelets } from "../cube/model";
 import type { TeachingChunk } from "../solver/beginner";
 import { CubeView } from "./CubeView";
+import { Disclosure } from "./Disclosure";
 import { FingerCue } from "./FingerCue";
 
 interface Props {
@@ -59,12 +60,11 @@ export function TeachingPanel({ facelets, chunk, suffix, doneInChunk, solved }: 
           <p className="case">{chunk.caseName}</p>
           <p className="goal"><strong>Goal.</strong> {chunk.goal}</p>
           <p className="hold">{chunk.hold}</p>
-          <details className="more">
-            <summary>Why this step</summary>
+          <Disclosure className="more" show="Show why this step" hide="Hide why this step" controls="why-this-step">
             <p><strong>On this cube.</strong> {chunk.advice}</p>
             <p className="why"><strong>Why.</strong> {chunk.why}</p>
             {chunk.tip ? <p className="tip"><strong>Reusable idea, not a camera reading.</strong> {chunk.tip}</p> : null}
-          </details>
+          </Disclosure>
           {doneInChunk > 0 ? (
             <p className="midchunk">You are partway through this step ({doneInChunk} of {chunk.moves.length} done). The demonstration continues from the cube as it is now. It does not rewind the lesson.</p>
           ) : null}
