@@ -35,6 +35,6 @@ describe("camera projection", () => {
     const phi = HOME_PHI;
     const drag = dragInCubeSpace(-36, 4, theta, phi);
     const up = cameraBasis(theta, phi).up;
-    expect(resolveTurn({ x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 }, drag, up)).toBe("U");
+    expect(resolveTurn({ x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 }, drag, up, cameraBasis(theta, phi).forward).move).toBe("U");
   });
 });

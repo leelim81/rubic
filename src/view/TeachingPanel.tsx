@@ -58,10 +58,13 @@ export function TeachingPanel({ facelets, chunk, suffix, doneInChunk, solved }: 
         <>
           <p className="case">{chunk.caseName}</p>
           <p className="goal"><strong>Goal.</strong> {chunk.goal}</p>
-          <p><strong>On this cube.</strong> {chunk.advice}</p>
-          <p className="why"><strong>Why.</strong> {chunk.why}</p>
-          {chunk.tip ? <p className="tip"><strong>Reusable idea, not a camera reading.</strong> {chunk.tip}</p> : null}
           <p className="hold">{chunk.hold}</p>
+          <details className="more">
+            <summary>Why this step</summary>
+            <p><strong>On this cube.</strong> {chunk.advice}</p>
+            <p className="why"><strong>Why.</strong> {chunk.why}</p>
+            {chunk.tip ? <p className="tip"><strong>Reusable idea, not a camera reading.</strong> {chunk.tip}</p> : null}
+          </details>
           {doneInChunk > 0 ? (
             <p className="midchunk">You are partway through this step ({doneInChunk} of {chunk.moves.length} done). The demonstration continues from the cube as it is now. It does not rewind the lesson.</p>
           ) : null}

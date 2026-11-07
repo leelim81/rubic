@@ -55,6 +55,7 @@ export interface CubeSceneOptions {
   gesture: CubeGesture;
   onTurn?: (move: string) => void;
   onViewShift?: (shifted: boolean) => void;
+  onGesture?: (message: string | null) => void;
 }
 
 export class CubeScene {
@@ -322,10 +323,26 @@ export class CubeScene {
     const hit = this.hit;
     this.dragging = false;
     this.hit = null;
-    if (this.options.gesture !== "turn" || !hit || this.animating) return;
-    if (dx * dx + dy * dy < TURN_DRAG_PX * TURN_DRAG_PX) return;
-    const move = this.dragMove(dx, dy, hit);
-    if (move) this.options.onTurn?.(move);
+    if (this.options.gesture !== "turn" || this.animating) return;
+    if (!hit) {
+      this.options.onGesture?.("The drag started off the cube. Put the pointer on a sticker.");
+      return;
+    }
+    if (dx * dx + dy * dy < TURN_DRAG_PX * TURN_DRAG_PX) {
+      this.options.onGesture?.("Too short to turn a face. Drag further across the sticker, or use a face button.");
+      return;
+    }
+    const result = this.dragMove(dx, dy, hit);
+    if (result.move) {
+      this.options.onGesture?.(null);
+      this.options.onTurn?.(result.move);
+      return;
+    }
+    this.options.onGesture?.(
+      result.reason === "ambiguous"
+        ? "That drag fits two layers, so neither turned. Drag along one edge, or use a face button."
+        : "That drag does not pick a layer. Drag across the face, not straight out from its centre.",
+    );
   };
 
   private onCancel = () => {
@@ -349,8 +366,8 @@ export class CubeScene {
     return { position: cubie.home.clone(), normal: sticker.normal.clone() };
   }
 
-  private dragMove(dx: number, dy: number, hit: { position: THREE.Vector3; normal: THREE.Vector3 }): string | null {
-    const { right, up } = cameraBasis(this.theta, this.phi);
+  private dragMove(dx: number, dy: number, hit: { position: THREE.Vector3; normal: THREE.Vector3 }) {
+    const { right, up, forward } = cameraBasis(this.theta, this.phi);
     const drag = {
       x: right.x * dx + up.x * -dy,
       y: right.y * dx + up.y * -dy,
@@ -361,6 +378,7 @@ export class CubeScene {
       { x: hit.normal.x, y: hit.normal.y, z: hit.normal.z },
       drag,
       up,
+      forward,
     );
   }
 }
