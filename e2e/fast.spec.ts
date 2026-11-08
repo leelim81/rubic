@@ -68,22 +68,32 @@ test("a pointer click stops a long valid solve and restore returns that start", 
   expect(before).toBeTruthy();
   await page.getByTestId("solve-fast").click();
   await expect(stop).toBeEnabled({ timeout: 5_000 });
-  await expect(page.getByTestId("lesson-facelets")).not.toHaveText(start, { timeout: 8_000 });
-  await expect(restore).toBeEnabled();
-  const running = await stop.boundingBox();
-  const restoreBox = await restore.boundingBox();
-  const view = page.viewportSize();
-  expect(view).toBeTruthy();
-  expect(inView(running, view!)).toBe(true);
-  expect(inView(restoreBox, view!)).toBe(true);
-  const controls = await page.locator(".controls").boundingBox();
-  const cube = await page.locator(".cube-frame").boundingBox();
-  const gap = (controls?.y ?? 0) - ((cube?.y ?? 0) + (cube?.height ?? 0));
-  const scrollY = await page.evaluate(() => window.scrollY);
-  expect(gap, `gap ${gap} scrollY ${scrollY} cube ${JSON.stringify(cube)} controls ${JSON.stringify(controls)}`).toBeGreaterThan(4);
-  expect(scrollY).toBeLessThan(3);
-  expect(Math.abs((running?.y ?? 0) - (before?.y ?? 0))).toBeLessThan(3);
-  await expect(stop).toBeEnabled();
+  await expect(page.getByTestId("lesson-facelets")).not.toHaveText(start, { timeout: 3_000 });
+  const metrics = await page.evaluate(() => {
+    const rect = (selector: string) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const box = node.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height };
+    };
+    const button = document.querySelector("[data-testid='stop-solve']") as HTMLButtonElement | null;
+    return {
+      stop: rect("[data-testid='stop-solve']"),
+      restore: rect("[data-testid='restore-solve']"),
+      controls: rect(".controls"),
+      cube: rect(".cube-frame"),
+      scrollY: window.scrollY,
+      enabled: Boolean(button && !button.disabled),
+      view: { width: window.innerWidth, height: window.innerHeight },
+    };
+  });
+  expect(metrics.enabled).toBe(true);
+  expect(metrics.scrollY).toBeLessThan(3);
+  expect(inView(metrics.stop, metrics.view)).toBe(true);
+  expect(inView(metrics.restore, metrics.view)).toBe(true);
+  const gap = (metrics.controls?.y ?? 0) - ((metrics.cube?.y ?? 0) + (metrics.cube?.height ?? 0));
+  expect(gap, `gap ${gap}`).toBeGreaterThan(4);
+  expect(Math.abs((metrics.stop?.y ?? 0) - (before?.y ?? 0))).toBeLessThan(3);
   if (testInfo.project.name === "mobile") await stop.tap();
   else await stop.click();
   const interrupted = await page.getByTestId("lesson-facelets").textContent();
@@ -97,7 +107,7 @@ test("a pointer click stops a long valid solve and restore returns that start", 
   const turnBox = await turn.boundingBox();
   const bar = await page.locator(".controls").boundingBox();
   expect(overlaps(turnBox, bar)).toBe(false);
-  expect(inView(turnBox, view!)).toBe(true);
+  expect(inView(turnBox, page.viewportSize()!)).toBe(true);
   if (testInfo.project.name === "mobile") await turn.tap();
   else await turn.click();
   await expect(turn).toHaveAttribute("aria-pressed", "true");

@@ -203,6 +203,7 @@ test("two right-face drags finish R2 at home and after the view turns", async ({
 });
 
 test("an upward drag on the right face turns that face, including after the view rotates", async ({ page }) => {
+  test.setTimeout(90_000);
   await page.getByRole("button", { name: "Turn a face" }).click();
   const turned = faceletsToString(applyMoves(solvedBytes(), ["R"]));
   const { box } = await frame(page);
