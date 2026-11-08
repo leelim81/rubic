@@ -2,8 +2,9 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { CubeScene, type CubeGesture } from "./cubeScene";
 
 export interface CubeHandle {
-  animate: (move: string, nextFacelets: string) => Promise<void>;
+  animate: (move: string, nextFacelets: string, durationMs?: number) => Promise<boolean>;
   show: (facelets: string) => void;
+  cancel: () => void;
   resetView: () => void;
 }
 
@@ -55,12 +56,13 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   }, [highlight]);
 
   useImperativeHandle(ref, () => ({
-    animate: async (move: string, nextFacelets: string) => {
+    animate: async (move: string, nextFacelets: string, durationMs?: number) => {
       const scene = sceneRef.current;
-      if (!scene) return;
-      await scene.animateMove(move, nextFacelets);
+      if (!scene) return false;
+      return scene.animateMove(move, nextFacelets, durationMs);
     },
     show: (next: string) => sceneRef.current?.setFacelets(next),
+    cancel: () => sceneRef.current?.cancelAnimation(),
     resetView: () => sceneRef.current?.resetView(),
   }));
 

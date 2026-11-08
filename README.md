@@ -1,12 +1,10 @@
 # Rubic
 
-A learning-first 3×3 lesson that runs as a static site at [https://leelim81.github.io/rubic/](https://leelim81.github.io/rubic/).
+A 3×3 solver that runs as a static site at [https://leelim81.github.io/rubic/](https://leelim81.github.io/rubic/).
 
-The app teaches a beginner layer-by-layer method (white cross, white corners, second layer, yellow cross, matching the cross, placing corners, twisting corners). It solves whatever legal position you scramble or scan. It does not undo the scramble backwards, and it does not pretend a short computer search is mathematically optimal.
+Next turns one layer on the cube. Solve 3× plays the remaining moves at three times the selected speed, and Restore before solve puts the cube back to the moment that run started. The solution is Kociemba's two-phase algorithm via cubejs. It is short, and it is not a claim that no shorter sequence exists. Enter colours is the way to type a cube in. Photos and a camera scan are not part of the page.
 
-The lesson page is one cube. **Next** turns the current layer on that cube, through the quarter or half turn, in about three quarters of a second. **Back** turns it back. **Replay move** shows the same turn again. Drag the cube in **Rotate view** and the surface under your finger follows the drag; that drag does not turn a layer. Switch to **Turn a face** and drag a sticker the way that layer should slide. A single piece cannot turn on its own. The face buttons (`Top, front edge left`, and the rest) do the same turns without a drag, and they follow the hold even after the view has moved. If the browser asks for reduced motion, a move jumps to its end instead of turning.
-
-A scan says **Face 1 of 6**, then one main button: **Capture photo**, then **Confirm colours & next face**, then **Review cube**, then **Start solving**. Drag the photo's corners onto the face before confirming. Uncertain colours, including a background that only looks like a sticker, have to be chosen by hand.
+Drag the cube in **Rotate view** and the surface under your finger follows the drag. Switch to **Turn a face** and drag a sticker the way that layer should slide. Face buttons, speed, scramble, and reset are under **Options**. If the browser asks for reduced motion, a move jumps to its end.
 
 ## Assumptions
 
@@ -16,7 +14,7 @@ A scan says **Face 1 of 6**, then one main button: **Capture photo**, then **Con
 
 ## Privacy
 
-Photos, sampled colours, and the lesson stay in your browser (`sessionStorage` remembers the lesson text, not the photos). There is no account, no server, and no automatic upload. Camera tracks are stopped when you leave the scanner. A denied or missing camera falls back to an upload or to typing the colours.
+The solution and the colours you type stay in this browser (`sessionStorage` remembers the move list). There is no account, no server, and no upload.
 
 A scan can be geometrically legal and still be the wrong cube. The app asks you to compare the 3D reconstruction with the physical cube before the lesson starts. Uncertain sticker colours are flagged and need a tap. Tests of colour use synthetic lighting, not a claim about every real camera and lamp.
 

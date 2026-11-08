@@ -76,6 +76,7 @@ export class CubeScene {
   private highlight = new Set<number>();
   private activePivot: THREE.Group | null = null;
   private activeAxis: "x" | "y" | "z" | null = null;
+  private generation = 0;
   private facelets = "";
   private disposed = false;
   private animating = false;
@@ -136,12 +137,14 @@ export class CubeScene {
     this.paint(this.facelets);
   }
 
-  async animateMove(move: string, nextFacelets?: string): Promise<void> {
+  async animateMove(move: string, nextFacelets?: string, durationMs?: number): Promise<boolean> {
     const spec = moveSpec(move);
     const settle = nextFacelets || this.facelets;
+    const token = this.generation;
     if (!spec || this.options.reducedMotion) {
+      if (this.generation !== token) return false;
       if (settle) this.setFacelets(settle);
-      return;
+      return this.generation === token;
     }
     this.animating = true;
     const pivot = new THREE.Group();
@@ -153,7 +156,11 @@ export class CubeScene {
       pivot.attach(cubie.mesh);
       for (const sticker of cubie.stickers) sticker.material.emissiveIntensity = 0.72;
     }
-    await this.tween(pivot, spec.axis, spec.angle);
+    const finished = await this.tween(pivot, spec.axis, spec.angle, durationMs, token);
+    if (!finished || this.generation !== token) {
+      this.animating = false;
+      return false;
+    }
     this.scene.remove(pivot);
     this.activePivot = null;
     this.activeAxis = null;
@@ -162,6 +169,18 @@ export class CubeScene {
     if (this.facelets) this.paint(this.facelets);
     this.animating = false;
     this.renderer.render(this.scene, this.camera);
+    return true;
+  }
+
+  cancelAnimation() {
+    this.generation += 1;
+    this.animating = false;
+    if (this.activePivot) {
+      this.scene.remove(this.activePivot);
+      this.activePivot = null;
+      this.activeAxis = null;
+    }
+    this.resetCubies();
   }
 
   resetView() {
@@ -274,17 +293,21 @@ export class CubeScene {
     }
   }
 
-  private tween(pivot: THREE.Group, axis: "x" | "y" | "z", angle: number) {
-    const duration = Math.max(160, this.options.turnMs ?? 750);
+  private tween(pivot: THREE.Group, axis: "x" | "y" | "z", angle: number, durationMs: number | undefined, token: number) {
+    const duration = durationMs ?? Math.max(160, this.options.turnMs ?? 750);
     const start = performance.now();
-    return new Promise<void>((resolve) => {
+    return new Promise<boolean>((resolve) => {
       const step = (now: number) => {
+        if (this.generation !== token || this.disposed) {
+          resolve(false);
+          return;
+        }
         const t = Math.min(1, (now - start) / duration);
         const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
         pivot.rotation[axis] = angle * eased;
         this.renderer.render(this.scene, this.camera);
-        if (t < 1 && !this.disposed) requestAnimationFrame(step);
-        else resolve();
+        if (t < 1) requestAnimationFrame(step);
+        else resolve(true);
       };
       requestAnimationFrame(step);
     });

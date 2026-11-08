@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
     if (message.type() === "error") errors.push(message.text());
   });
   await page.goto("./");
-  await page.waitForSelector("text=This cube is solved");
+  await page.waitForSelector("text=No moves needed");
   (page as unknown as { __errors: string[] }).__errors = errors;
 });
 
@@ -16,27 +16,31 @@ test.afterEach(async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test("show and hide controls are buttons you can use from the keyboard", async ({ page }, testInfo) => {
-  const faces = page.locator("details.face-fallback summary");
-  await expect(faces).toHaveText("Show face buttons");
-  await expect(faces).toHaveAttribute("aria-expanded", "false");
+test("options stay closed until opened, and face buttons work from the keyboard", async ({ page }, testInfo) => {
+  const options = page.locator("details.options-panel summary");
+  await expect(options).toHaveText("Options");
+  await expect(options).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByLabel("Turn speed")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Scramble" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Scan" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Top, front edge left U", exact: true })).toBeHidden();
   if (testInfo.project.name === "desktop") {
-    await faces.scrollIntoViewIfNeeded();
+    await options.scrollIntoViewIfNeeded();
     await page.screenshot({ path: "/tmp/rubic-disclosure-desktop.png" });
   }
-  await faces.focus();
-  await expect(faces).toBeFocused();
+  await options.focus();
+  await expect(options).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(faces).toHaveText("Hide face buttons");
-  await expect(faces).toHaveAttribute("aria-expanded", "true");
+  await expect(options).toHaveText("Hide options");
+  await expect(options).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: "Top, front edge left U", exact: true })).toBeVisible();
-  await faces.click();
-  await expect(faces).toHaveText("Show face buttons");
-  await expect(faces).toHaveAttribute("aria-expanded", "false");
+  await options.click();
+  await expect(options).toHaveText("Options");
+  await expect(options).toHaveAttribute("aria-expanded", "false");
 });
 
-test("scramble, next, back, and demonstration stay in step", async ({ page }, testInfo) => {
+test("scramble, next, back, and replay stay in step", async ({ page }, testInfo) => {
+  await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Scramble" }).click();
   const step = page.getByTestId("lesson-step");
   await expect(step).toHaveText(/Step 1 of|Half turn/, { timeout: 20_000 });
@@ -52,10 +56,11 @@ test("scramble, next, back, and demonstration stay in step", async ({ page }, te
 });
 
 test("reset returns to the solved empty state", async ({ page }) => {
+  await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Scramble" }).click();
   await expect(page.getByTestId("lesson-step")).toHaveText(/Step 1 of|Half turn/, { timeout: 20_000 });
   await page.getByRole("button", { name: "Reset", exact: true }).click();
-  await expect(page.getByText("This cube is solved")).toBeVisible();
+  await expect(page.getByText("No moves needed")).toBeVisible();
 });
 
 test("manual colours can reject an impossible cube", async ({ page }, testInfo) => {
@@ -71,14 +76,11 @@ test("manual colours can reject an impossible cube", async ({ page }, testInfo) 
   }
 });
 
-test("scan instructions explain six photos", async ({ page }, testInfo) => {
-  await page.getByRole("button", { name: "Scan" }).click();
-  await expect(page.getByText("Face 1 of 6")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Capture photo" })).toBeVisible();
-  await expect(page.getByText(/close this scan and start again/i)).toBeVisible();
-  if (testInfo.project.name === "desktop") {
-    await page.screenshot({ path: "/tmp/rubic-scan.png", fullPage: true });
-  }
+test("manual entry of the solved net returns to the cube", async ({ page }) => {
+  await page.getByRole("button", { name: "Enter colours" }).click();
+  await page.getByRole("button", { name: "Use these colours" }).click();
+  await expect(page.getByText("No moves needed")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "Scan" })).toHaveCount(0);
 });
 
 test("states that moves jump when reduced motion is requested", async ({ page }) => {
