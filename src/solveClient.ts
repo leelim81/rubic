@@ -1,5 +1,5 @@
 import type { Solution } from "./solver/beginner";
-import { solveBeginner } from "./solver/beginner";
+import { solveCube } from "./solver/twoPhase";
 
 export function solveInWorker(facelets: string): Promise<Solution> {
   return new Promise((resolve, reject) => {
@@ -8,7 +8,7 @@ export function solveInWorker(facelets: string): Promise<Solution> {
       worker = new Worker(new URL("./worker/solverWorker.ts", import.meta.url), { type: "module" });
     } catch (error) {
       try {
-        resolve(solveBeginner(facelets));
+        resolve(solveCube(facelets));
       } catch (fallback) {
         reject(fallback instanceof Error ? fallback : error);
       }
@@ -16,7 +16,7 @@ export function solveInWorker(facelets: string): Promise<Solution> {
     }
     const timer = window.setTimeout(() => {
       worker.terminate();
-      reject(new Error("The lesson took too long to prepare. Try a scramble, or correct the scan."));
+      reject(new Error("The solution took too long to prepare."));
     }, 8000);
     worker.onmessage = (event: MessageEvent<{ solution?: Solution; error?: string }>) => {
       window.clearTimeout(timer);
@@ -28,7 +28,7 @@ export function solveInWorker(facelets: string): Promise<Solution> {
       window.clearTimeout(timer);
       worker.terminate();
       try {
-        resolve(solveBeginner(facelets));
+        resolve(solveCube(facelets));
       } catch (error) {
         reject(error instanceof Error ? error : new Error("The solver could not start."));
       }

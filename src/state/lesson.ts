@@ -107,7 +107,7 @@ export function stepBack(lesson: Lesson): Lesson {
 }
 
 export function deviate(lesson: Lesson, facelets: string, solution: Solution): Lesson {
-  return branchFrom(lesson, facelets, solution, null, "That turn was not the next lesson move, so the lesson restarted from the cube as it is now.");
+  return branchFrom(lesson, facelets, solution, null, "That turn was not the next move, so the solution restarted from the cube as it is now.");
 }
 
 /** A turn made while no lesson move is waiting. The opposite turn restores the previous lesson. */
@@ -167,7 +167,7 @@ export function commitTurn(lesson: Lesson, move: string): { lesson: Lesson; anim
       const half = isFaceHalf(next) ? ` Do ${next?.[0]} twice, or ${next?.[0]}' twice.` : "";
       const mid = lesson.pending ? ` Finish ${lesson.pending.move}, or take that quarter back.` : "";
       return {
-        lesson: { ...lesson, notice: `${move} is not the next lesson move, so the cube stays as it is.${next ? ` Next is ${next}.` : ""}${half}${mid}` },
+        lesson: { ...lesson, notice: `${move} is not the next move, so the cube stays as it is.${next ? ` Next is ${next}.` : ""}${half}${mid}` },
         animate: null,
       };
     }
@@ -202,23 +202,43 @@ export function upcoming(lesson: Lesson): { chunk: TeachingChunk; suffix: string
   return { chunk, suffix: chunk.moves.slice(doneInChunk), doneInChunk };
 }
 
+export function cloneLesson(lesson: Lesson): Lesson {
+  return {
+    ...lesson,
+    moves: [...lesson.moves],
+    chunkOfMove: [...lesson.chunkOfMove],
+    chunks: lesson.chunks.map((chunk) => ({ ...chunk, moves: [...chunk.moves], focus: [...(chunk.focus ?? [])], fingertricks: [...(chunk.fingertricks ?? [])] })),
+    history: lesson.history.map((item) => ({
+      ...item,
+      moves: [...item.moves],
+      chunkOfMove: [...item.chunkOfMove],
+      pending: item.pending ? { ...item.pending } : null,
+    })),
+    pending: lesson.pending ? { ...lesson.pending } : null,
+    busy: false,
+  };
+}
+
+/** The next forward animation from the current cursor, including the second quarter of a half turn. */
+export function advanceLesson(lesson: Lesson): { move: string; lesson: Lesson } | null {
+  const ready = { ...lesson, busy: false, notice: null as string | null };
+  if (ready.pending?.intent === "undo") return null;
+  if (ready.pending?.intent === "do") {
+    const result = commitTurn(ready, ready.pending.move);
+    if (!result.animate) return null;
+    return { move: result.animate, lesson: { ...result.lesson, busy: false } };
+  }
+  if (ready.cursor >= ready.moves.length) return null;
+  const move = ready.moves[ready.cursor];
+  if (!move) return null;
+  return { move, lesson: { ...stepForward(ready), busy: false } };
+}
+
 export function progressLabel(lesson: Lesson): { stage: string; step: string } {
   const total = lesson.moves.length;
-  if (!total || lesson.cursor >= total) {
-    return {
-      stage: "Solved",
-      step: total ? "This lesson is finished" : "No moves needed",
-    };
-  }
-  const chunk = lesson.chunks[lesson.chunkOfMove[lesson.cursor] ?? 0];
-  const stage = chunk && chunk.stageNumber > 0 ? `Stage ${chunk.stageNumber} of 7 · ${chunk.stageName}` : "Hold the cube";
-  const stageIndexes = lesson.chunkOfMove
-    .map((chunkIndex, moveIndex) => ({ chunkIndex, moveIndex }))
-    .filter((item) => lesson.chunks[item.chunkIndex]?.stageId === chunk?.stageId);
-  const firstMoves = stageIndexes.filter((item, index, all) => index === 0 || item.chunkIndex !== all[index - 1]?.chunkIndex);
-  const stepIndex = Math.max(0, firstMoves.findIndex((item) => item.chunkIndex === lesson.chunkOfMove[lesson.cursor]));
-  const chunkIndex = lesson.chunkOfMove[lesson.cursor] ?? 0;
-  const moveInChunk = lesson.chunkOfMove.slice(0, lesson.cursor + 1).filter((item) => item === chunkIndex).length;
+  if (!total) return { stage: "Solved", step: "No moves needed" };
+  if (lesson.cursor >= total && !lesson.pending) return { stage: "Solved", step: "Solved" };
+  const stage = `Step ${Math.min(lesson.cursor + 1, total)} of ${total}`;
   const next = lesson.moves[lesson.cursor];
   const previous = lesson.cursor > 0 ? lesson.moves[lesson.cursor - 1] : undefined;
   if (lesson.pending?.intent === "do" && isFaceHalf(next)) {
@@ -231,10 +251,7 @@ export function progressLabel(lesson: Lesson): { stage: string; step: string } {
     const face = next[0];
     return { stage, step: `Half turn ${next}: quarter 1 of 2. ${face} twice, or ${face}' twice.` };
   }
-  return {
-    stage,
-    step: `Step ${stepIndex + 1} of ${Math.max(1, firstMoves.length)}, move ${moveInChunk}`,
-  };
+  return { stage, step: `Step ${Math.min(lesson.cursor + 1, total)} of ${total} · ${next}` };
 }
 
 export function applyUserMove(facelets: string, move: string): string {

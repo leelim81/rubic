@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { applyMoves, faceletsToString, solvedBytes } from "../src/cube/model";
 import { emptyLesson, withSolution } from "../src/state/lesson";
-import { solveBeginner } from "../src/solver/beginner";
+import { solveCube } from "../src/solver/twoPhase";
 import { HOME_PHI, HOME_THETA, cameraBasis, dragInCubeSpace, orbitBy, projectToScreen } from "../src/view/camera";
 import { resolveTurn } from "../src/view/drag";
 
@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
     if (message.type() === "error") errors.push(message.text());
   });
   await page.goto("./");
-  await page.getByText("This cube is solved").waitFor();
+  await page.getByText("No moves needed").waitFor();
   (page as unknown as { __errors: string[] }).__errors = errors;
 });
 
@@ -34,7 +34,8 @@ test("rotate view follows the finger on screen and does not turn a face", async 
     [0, -42, "y", -1],
   ];
   for (const [dx, dy, axis, sign] of directions) {
-    await page.locator(".secondary-actions").getByRole("button", { name: "Reset view" }).click();
+    const reset = page.getByRole("status").getByRole("button", { name: "Reset view" });
+    if (await reset.count()) await reset.click();
     const spot = projectToScreen(FRONT_LETTER, box.width, box.height, HOME_THETA, HOME_PHI);
     const before = await letterNear(canvas, spot, 42);
     expect(before?.n ?? 0).toBeGreaterThan(8);
@@ -91,9 +92,11 @@ test("turn mode follows the sticker, a short drag cancels, and buttons invert it
 
   const move = expectedMove(HOME_THETA, HOME_PHI, -48, 0, { x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 });
   expect(move).toBe("U");
-  await mouseDrag(page, box, from, { x: from.x - 48, y: from.y });
+  const placed = await frame(page);
+  const sticker = projectToScreen({ x: 0, y: 1, z: 1 }, placed.box.width, placed.box.height, HOME_THETA, HOME_PHI);
+  await dragOnCanvas(placed.canvas, sticker, { x: sticker.x - 48, y: sticker.y });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), [move!])));
-  await page.locator("details.face-fallback summary").click();
+  await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Top, front edge right" }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
 });
@@ -130,7 +133,7 @@ test("a quarter-turn lesson steps forward and back, and a wrong turn stays put",
   const step = page.getByTestId("lesson-step");
   await expect(page.getByRole("button", { name: /^Next/ })).toHaveText(/U'/);
   const before = await page.getByTestId("lesson-facelets").textContent();
-  await page.locator("details.face-fallback summary").click();
+  await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Top, front edge right U'", exact: true }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
   await page.getByRole("button", { name: "Top, front edge left U", exact: true }).click();
@@ -140,18 +143,18 @@ test("a quarter-turn lesson steps forward and back, and a wrong turn stays put",
   await page.getByRole("button", { name: "Front, clockwise F", exact: true }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(before ?? "");
   await expect(step).toContainText("Step 1 of");
-  await expect(page.getByRole("status").filter({ hasText: "not the next lesson move" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "not the next move" })).toBeVisible();
 });
 
 test("a half turn is two matching quarters, and the other direction works too", async ({ page }) => {
   test.setTimeout(120_000);
   for (const face of ["U", "D", "F", "B", "L", "R"] as const) {
     const start = faceletsToString(applyMoves(solvedBytes(), [`${face}2`]));
-    if (face !== "D") expect(solveBeginner(start).moves[0]).toBe(`${face}2`);
+    expect(solveCube(start).moves[0]).toBe(`${face}2`);
     await installLesson(page, start, [`${face}2`]);
     await expect(page.getByRole("button", { name: /^Next/ })).toHaveText(new RegExp(`${face}2`));
     await expect(page.getByTestId("lesson-step")).toContainText("quarter 1 of 2");
-    await page.locator("details.face-fallback summary").click();
+    await page.locator("details.options-panel summary").click();
     const clockwise = FACE_BUTTON[face]!;
     const prime = FACE_BUTTON[`${face}'`]!;
     await page.getByRole("button", { name: `${clockwise} ${face}`, exact: true }).click();
@@ -206,8 +209,9 @@ test("an upward drag on the right face turns that face, including after the view
   const home = await pointOnFace(page.locator(".cube-frame canvas"), projectToScreen({ x: 1.48, y: 0, z: 0 }, box.width, box.height, HOME_THETA, HOME_PHI), { x: 1, y: 0, z: 0 });
   await mouseDrag(page, box, home, { x: home.x, y: home.y - 50 });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(turned, { timeout: 15_000 });
+  await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Reset", exact: true }).click();
-  await expect(page.getByText("This cube is solved")).toBeVisible();
+  await expect(page.getByText("No moves needed")).toBeVisible();
   await page.getByRole("button", { name: "Rotate view" }).click();
   const again = await frame(page);
   const orbit = 16;
@@ -221,7 +225,7 @@ test("an upward drag on the right face turns that face, including after the view
 });
 
 test("face buttons turn the held cube and the opposite button undoes it", async ({ page }) => {
-  await page.locator("details.face-fallback summary").click();
+  await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Right, front edge up" }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), ["R"])), { timeout: 15_000 });
   await page.getByRole("button", { name: "Right, front edge down" }).click();
@@ -250,12 +254,28 @@ function invert(move: string): string {
 }
 
 async function installLesson(page: Page, start: string, moves?: string[]) {
-  const solvedLesson = solveBeginner(start);
-  const first = solvedLesson.chunks[0];
-  if (!first) throw new Error("The fixture lesson has no step.");
   const solution = moves
-    ? { ...solvedLesson, moves, chunkOfMove: moves.map(() => 0), chunks: [{ ...first, moves, fingertricks: moves.map(() => "Half turn.") }] }
-    : solvedLesson;
+    ? {
+        moves,
+        chunkOfMove: moves.map(() => 0),
+        chunks: [{
+          id: "script",
+          stageId: "solve",
+          stageNumber: 0,
+          stageName: "Solve",
+          title: "Solve",
+          goal: "",
+          why: "",
+          caseName: "script",
+          hold: "",
+          moves,
+          focus: [],
+          advice: "",
+          tip: null,
+          fingertricks: moves.map(() => ""),
+        }],
+      }
+    : solveCube(start);
   const lesson = withSolution(emptyLesson(SOLVED), start, solution);
   await page.evaluate((data) => sessionStorage.setItem("rubic-lesson-v1", JSON.stringify(data)), lesson);
   await page.reload();
@@ -388,9 +408,9 @@ async function mouseDrag(page: Page, box: { x: number; y: number }, from: { x: n
 }
 
 async function touchDrag(canvas: Locator, box: { x: number; y: number }, from: { x: number; y: number }, to: { x: number; y: number }) {
-  const down = { clientX: box.x + from.x, clientY: box.y + from.y, pointerId: 3, pointerType: "touch", buttons: 1, isPrimary: true, bubbles: true };
-  const up = { clientX: box.x + to.x, clientY: box.y + to.y, pointerId: 3, pointerType: "touch", buttons: 0, isPrimary: true, bubbles: true };
+  const down = { clientX: box.x + from.x, clientY: box.y + from.y, pointerId: 3, pointerType: "touch", buttons: 1, isPrimary: true, bubbles: true, cancelable: true };
+  const up = { clientX: box.x + to.x, clientY: box.y + to.y, pointerId: 3, pointerType: "touch", buttons: 0, isPrimary: true, bubbles: true, cancelable: true };
   await canvas.dispatchEvent("pointerdown", down);
-  await canvas.dispatchEvent("pointermove", { ...up, buttons: 1 });
+  await canvas.dispatchEvent("pointermove", { ...up, buttons: 1, cancelable: true });
   await canvas.dispatchEvent("pointerup", up);
 }

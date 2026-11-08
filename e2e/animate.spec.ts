@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { applyMoves, faceletsToString, solvedBytes } from "../src/cube/model";
 import { emptyLesson, withSolution } from "../src/state/lesson";
-import { solveBeginner } from "../src/solver/beginner";
 
 const SOLVED = faceletsToString(solvedBytes());
 
@@ -18,7 +17,7 @@ test.beforeEach(async ({ page }) => {
     if (message.type() === "error") errors.push(message.text());
   });
   await page.goto("./");
-  await page.getByText("This cube is solved").waitFor();
+  await page.getByText("No moves needed").waitFor();
   (page as unknown as { __errors: string[] }).__errors = errors;
 });
 
@@ -67,6 +66,7 @@ test("rapid next taps advance one move, and replay does not change the lesson", 
   });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), ["R"])), { timeout: 15_000 });
   const step = await page.getByTestId("lesson-step").textContent();
+  await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Replay move" }).click();
   await page.waitForTimeout(400);
   await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), ["R"])));
@@ -76,25 +76,23 @@ test("rapid next taps advance one move, and replay does not change the lesson", 
 });
 
 async function install(page: Page, start: string, moves: string[]) {
-  const solvedLesson = start === SOLVED ? null : solveBeginner(start);
-  const first = solvedLesson?.chunks[0];
   const lesson = withSolution(emptyLesson(SOLVED), start, {
     moves,
     chunkOfMove: moves.map(() => 0),
     chunks: [{
-      id: first?.id ?? "scripted",
-      stageId: first?.stageId ?? "cross",
-      stageNumber: first?.stageNumber ?? 1,
-      stageName: first?.stageName ?? "White cross",
-      title: first?.title ?? "Turn the layer",
-      goal: first?.goal ?? "Turn one layer.",
-      why: first?.why ?? "The test scripted this move.",
-      caseName: first?.caseName ?? "scripted",
-      hold: first?.hold ?? "Yellow on top, green in front.",
+      id: "scripted",
+      stageId: "solve",
+      stageNumber: 0,
+      stageName: "Solve",
+      title: "Turn the layer",
+      goal: "",
+      why: "",
+      caseName: "scripted",
+      hold: "",
       moves,
-      focus: first?.focus ?? [],
-      advice: first?.advice ?? "",
-      tip: first?.tip ?? null,
+      focus: [],
+      advice: "",
+      tip: null,
       fingertricks: moves.map(() => "Turn the layer."),
     }],
   });

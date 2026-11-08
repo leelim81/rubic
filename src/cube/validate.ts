@@ -101,7 +101,7 @@ export function validateBytes(state: Uint8Array, options?: { searchRotations?: b
       if (OPPOSITE_COLOR[color] !== opposite) {
         issues.push({
           code: "opposites",
-          message: `This lesson assumes the ordinary Western opposites: white opposite yellow, red opposite orange, and blue opposite green. Here ${COLOR_NAME[color]} is opposite ${COLOR_NAME[opposite]}.`,
+          message: `This cube uses the ordinary Western opposites: white opposite yellow, red opposite orange, and blue opposite green. Here ${COLOR_NAME[color]} is opposite ${COLOR_NAME[opposite]}.`,
           ambiguous: false,
           pieces: [COLOR_NAME[color], COLOR_NAME[opposite]],
         });
@@ -115,7 +115,7 @@ export function validateBytes(state: Uint8Array, options?: { searchRotations?: b
         issues.push({
           code: "chirality",
           message:
-            "The opposite colours are right, but the side centres are a mirror of the usual Western arrangement (green in front and white on top would not put red on the right). This lesson only solves the usual arrangement.",
+            "The opposite colours are right, but the side centres are a mirror of the usual Western arrangement (green in front and white on top would not put red on the right). This solver only accepts the usual arrangement.",
           ambiguous: false,
           pieces: [],
         });
