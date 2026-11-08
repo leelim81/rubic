@@ -105,7 +105,7 @@ test("a touch drag and a rotated view still turn the layer the finger follows", 
   const view = orbitBy(HOME_THETA, HOME_PHI, orbit, 0, box.width, box.height);
   await page.getByRole("button", { name: "Turn a face" }).click();
   const guess = projectToScreen({ x: 0, y: 1, z: 1 }, box.width, box.height, view.theta, view.phi);
-  const from = await pointOnFace(canvas, guess, { x: 0, y: 0, z: 1 });
+  const from = await pointOnFace(canvas, guess, { x: 0, y: 0, z: 1 }, "guess");
   const move = expectedMove(view.theta, view.phi, -40, 6, { x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 });
   expect(move).toBeTruthy();
   const fresh = await canvas.boundingBox();
@@ -273,7 +273,7 @@ function expectedMove(
   return resolveTurn(position, normal, dragInCubeSpace(dx, dy, theta, phi), cameraBasis(theta, phi).up, cameraBasis(theta, phi).forward).move;
 }
 
-async function pointOnFace(canvas: Locator, guess: { x: number; y: number }, normal: { x: number; y: number; z: number }) {
+async function pointOnFace(canvas: Locator, guess: { x: number; y: number }, normal: { x: number; y: number; z: number }, prefer: "centre" | "guess" = "centre") {
   const point = await canvas.evaluate((el, query) => {
     const hit = (el as HTMLCanvasElement & { __rubicHit?: (x: number, y: number) => { x: number; y: number; z: number } | null }).__rubicHit;
     if (!hit) return null;
@@ -290,8 +290,8 @@ async function pointOnFace(canvas: Locator, guess: { x: number; y: number }, nor
       }
     }
     if (!count) return null;
-    const cx = sx / count;
-    const cy = sy / count;
+    const cx = query.prefer === "guess" ? query.x : sx / count;
+    const cy = query.prefer === "guess" ? query.y : sy / count;
     let best: { x: number; y: number } | null = null;
     let bestDistance = Number.POSITIVE_INFINITY;
     for (let y = 4; y < el.clientHeight - 4; y += 4) {
@@ -306,7 +306,7 @@ async function pointOnFace(canvas: Locator, guess: { x: number; y: number }, nor
       }
     }
     return best;
-  }, { x: guess.x, y: guess.y, normal });
+  }, { x: guess.x, y: guess.y, normal, prefer });
   expect(point, "The face under that drag is not on the cube.").toBeTruthy();
   return point!;
 }
