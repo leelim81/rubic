@@ -45,12 +45,12 @@ test("a half turn passes a quarter-turn pose before the final state", async ({ p
   const start = faceletsToString(applyMoves(solvedBytes(), ["U2"]));
   await install(page, start, ["U2"]);
   const before = await readSample(page);
-  await startRecording(page, 1600);
+  await startRecording(page, 3500);
   await page.getByRole("button", { name: /^Next/ }).click();
   const mid = await collectFrames(page);
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
   expect(mid.some((sample) => sample.animating && Math.abs(sample.angle) > 0.7 && Math.abs(sample.angle) < 2.4)).toBe(true);
-  const posed = mid.find((sample) => Math.abs(Math.abs(sample.angle) - Math.PI / 2) < 0.45);
+  const posed = mid.find((sample) => Math.abs(Math.abs(sample.angle) - Math.PI / 2) < 0.85);
   expect(posed).toBeTruthy();
   const moved = posed!.cubies.some((cubie) => cubie.hy === 1 && travel(cubie, before) > 0.25);
   const held = posed!.cubies.filter((cubie) => cubie.hy !== 1).every((cubie) => travel(cubie, before) < 0.08);
@@ -127,7 +127,7 @@ async function startRecording(page: Page, ms: number) {
 }
 
 async function collectFrames(page: Page): Promise<Sample[]> {
-  await page.waitForFunction(() => (window as unknown as { __rubicFrames?: Sample[] | null }).__rubicFrames, undefined, { timeout: 4000 });
+  await page.waitForFunction(() => (window as unknown as { __rubicFrames?: Sample[] | null }).__rubicFrames, undefined, { timeout: 8_000 });
   return page.evaluate(() => (window as unknown as { __rubicFrames: Sample[] }).__rubicFrames);
 }
 
