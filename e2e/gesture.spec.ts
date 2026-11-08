@@ -22,6 +22,54 @@ test.afterEach(async ({ page }) => {
   expect((page as unknown as { __errors?: string[] }).__errors ?? []).toEqual([]);
 });
 
+const FRONT_LETTER = { x: 0, y: 0, z: 1.47 };
+
+test("rotate view follows the finger on screen and does not turn a face", async ({ page }) => {
+  const { canvas, box } = await frame(page);
+  const directions: [number, number, "x" | "y", number][] = [
+    [48, 0, "x", 1],
+    [-48, 0, "x", -1],
+    [0, 42, "y", 1],
+    [0, -42, "y", -1],
+  ];
+  for (const [dx, dy, axis, sign] of directions) {
+    await page.locator(".secondary-actions").getByRole("button", { name: "Reset view" }).click();
+    const spot = projectToScreen(FRONT_LETTER, box.width, box.height, HOME_THETA, HOME_PHI);
+    const before = await letterNear(canvas, spot, 42);
+    expect(before?.n ?? 0).toBeGreaterThan(8);
+    await dragCanvas(page, canvas, dx, dy);
+    const moved = orbitBy(HOME_THETA, HOME_PHI, dx, dy, box.width, box.height);
+    const next = projectToScreen(FRONT_LETTER, box.width, box.height, moved.theta, moved.phi);
+    const after = await letterNear(canvas, next, 56);
+    expect(after?.n ?? 0).toBeGreaterThan(8);
+    const delta = axis === "x" ? after!.x - before!.x : after!.y - before!.y;
+    expect(delta * sign).toBeGreaterThan(12);
+  }
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED);
+  await expect(page.getByTestId("lesson-step")).toHaveText(/No moves needed/);
+});
+
+test("a simulated touch drag follows the finger and does not scroll the page", async ({ page }) => {
+  test.info().annotations.push({ type: "input", description: "Simulated touch through pointer events, not a physical phone." });
+  await page.evaluate(() => {
+    document.body.style.minHeight = "4000px";
+    window.scrollTo(0, 240);
+  });
+  const { canvas, box } = await frame(page);
+  const spot = projectToScreen(FRONT_LETTER, box.width, box.height, HOME_THETA, HOME_PHI);
+  const before = await letterNear(canvas, spot, 42);
+  expect(before?.n ?? 0).toBeGreaterThan(8);
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  await touchDrag(canvas, box, { x: spot.x, y: spot.y }, { x: spot.x + 46, y: spot.y - 34 });
+  const moved = orbitBy(HOME_THETA, HOME_PHI, 46, -34, box.width, box.height);
+  const next = projectToScreen(FRONT_LETTER, box.width, box.height, moved.theta, moved.phi);
+  const after = await letterNear(canvas, next, 56);
+  expect(after!.x).toBeGreaterThan(before!.x + 10);
+  expect(after!.y).toBeLessThan(before!.y - 8);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED);
+});
+
 test("dragging the cube in rotate-view mode orbits and does not turn a layer", async ({ page }) => {
   const { canvas, box } = await frame(page);
   const before = await canvas.screenshot();
@@ -51,8 +99,9 @@ test("turn mode follows the sticker, a short drag cancels, and buttons invert it
 
 test("a touch drag and a rotated view still turn the layer the finger follows", async ({ page }) => {
   const { canvas, box } = await frame(page);
-  await mouseDrag(page, box, { x: box.width * 0.5, y: box.height * 0.5 }, { x: box.width * 0.5 + 90, y: box.height * 0.5 });
-  const view = orbitBy(HOME_THETA, HOME_PHI, 90, 0);
+  const orbit = Math.round(box.width * 0.14);
+  await mouseDrag(page, box, { x: box.width * 0.5, y: box.height * 0.5 }, { x: box.width * 0.5 + orbit, y: box.height * 0.5 });
+  const view = orbitBy(HOME_THETA, HOME_PHI, orbit, 0, box.width, box.height);
   await page.getByRole("button", { name: "Turn a face" }).click();
   const from = projectToScreen({ x: 0, y: 1, z: 1 }, box.width, box.height, view.theta, view.phi);
   const move = expectedMove(view.theta, view.phi, -40, 6, { x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 });
@@ -132,8 +181,9 @@ test("two right-face drags finish R2 at home and after the view turns", async ({
   await expect(page.getByTestId("lesson-facelets")).toHaveText(start, { timeout: 15_000 });
   await page.getByRole("button", { name: "Rotate view" }).click();
   const again = await frame(page);
-  await mouseDrag(page, again.box, { x: again.box.width * 0.55, y: again.box.height * 0.5 }, { x: again.box.width * 0.55 + 70, y: again.box.height * 0.5 });
-  const view = orbitBy(HOME_THETA, HOME_PHI, 70, 0);
+  const orbit = Math.round(again.box.width * 0.1);
+  await mouseDrag(page, again.box, { x: again.box.width * 0.55, y: again.box.height * 0.5 }, { x: again.box.width * 0.55 + orbit, y: again.box.height * 0.5 });
+  const view = orbitBy(HOME_THETA, HOME_PHI, orbit, 0, again.box.width, again.box.height);
   await page.getByRole("button", { name: "Turn a face" }).click();
   const shifted = projectToScreen({ x: 1.48, y: 0, z: 0 }, again.box.width, again.box.height, view.theta, view.phi);
   await mouseDrag(page, again.box, shifted, { x: shifted.x, y: shifted.y - 55 });
@@ -152,11 +202,13 @@ test("an upward drag on the right face turns that face, including after the view
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(page.getByText("This cube is solved")).toBeVisible();
   await page.getByRole("button", { name: "Rotate view" }).click();
-  await mouseDrag(page, box, { x: box.width * 0.55, y: box.height * 0.5 }, { x: box.width * 0.55 + 70, y: box.height * 0.5 });
-  const view = orbitBy(HOME_THETA, HOME_PHI, 70, 0);
+  const again = await frame(page);
+  const orbit = Math.round(again.box.width * 0.1);
+  await mouseDrag(page, again.box, { x: again.box.width * 0.55, y: again.box.height * 0.5 }, { x: again.box.width * 0.55 + orbit, y: again.box.height * 0.5 });
+  const view = orbitBy(HOME_THETA, HOME_PHI, orbit, 0, again.box.width, again.box.height);
   await page.getByRole("button", { name: "Turn a face" }).click();
-  const shifted = projectToScreen({ x: 1.48, y: 0, z: 0 }, box.width, box.height, view.theta, view.phi);
-  await mouseDrag(page, box, shifted, { x: shifted.x, y: shifted.y - 55 });
+  const shifted = projectToScreen({ x: 1.48, y: 0, z: 0 }, again.box.width, again.box.height, view.theta, view.phi);
+  await mouseDrag(page, again.box, shifted, { x: shifted.x, y: shifted.y - 55 });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(turned, { timeout: 15_000 });
 });
 
@@ -219,6 +271,48 @@ async function frame(page: Page) {
   const box = await canvas.boundingBox();
   if (!box) throw new Error("The lesson cube is not on screen.");
   return { canvas, box };
+}
+
+async function letterNear(canvas: Locator, point: { x: number; y: number }, radius: number) {
+  return canvas.evaluate((el, query) => {
+    const gl = el.getContext("webgl2") ?? el.getContext("webgl");
+    if (!gl) return null;
+    const width = gl.drawingBufferWidth;
+    const height = gl.drawingBufferHeight;
+    const scaleX = width / el.clientWidth;
+    const scaleY = height / el.clientHeight;
+    const pixels = new Uint8Array(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    const cx = query.x * scaleX;
+    const cy = height - query.y * scaleY;
+    const limit = query.radius * Math.max(scaleX, scaleY);
+    let sx = 0;
+    let sy = 0;
+    let count = 0;
+    for (let py = 0; py < height; py += 1) {
+      for (let px = 0; px < width; px += 1) {
+        if ((px - cx) ** 2 + (py - cy) ** 2 > limit * limit) continue;
+        const index = (py * width + px) * 4;
+        const red = pixels[index] ?? 0;
+        const green = pixels[index + 1] ?? 0;
+        const blue = pixels[index + 2] ?? 0;
+        if (green > 110 && red < 80 && green > red + 40 && blue < 140) {
+          sx += px / scaleX;
+          sy += (height - py) / scaleY;
+          count += 1;
+        }
+      }
+    }
+    if (!count) return null;
+    return { x: sx / count, y: sy / count, n: count };
+  }, { x: point.x, y: point.y, radius });
+}
+
+async function dragCanvas(page: Page, canvas: Locator, dx: number, dy: number) {
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("The lesson cube is not on screen.");
+  const from = { x: box.width * 0.5, y: box.height * 0.48 };
+  await mouseDrag(page, box, from, { x: from.x + dx, y: from.y + dy });
 }
 
 async function mouseDrag(page: Page, box: { x: number; y: number }, from: { x: number; y: number }, to: { x: number; y: number }) {

@@ -78,7 +78,7 @@ test("scans a short legal cube and solves it through a stage change", async ({ p
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(title).toHaveText(/White cross/);
   await expect(page.getByTestId("lesson-step")).toHaveText("Half turn R2: quarter 1 of 2. R twice, or R' twice.");
-  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.getByRole("button", { name: "Replay move" }).click();
   await expect(page.getByTestId("lesson-step")).toHaveText("Half turn R2: quarter 1 of 2. R twice, or R' twice.");
   await expect(title).toHaveText(/White cross/);
   await next.click();

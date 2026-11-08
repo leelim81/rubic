@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { CAMERA_FOV, HOME_PHI, HOME_THETA, cameraBasis, cameraDistance, cameraEye, dragInCubeSpace, projectToScreen } from "../src/view/camera";
+import { CAMERA_FOV, HOME_PHI, HOME_THETA, PHI_MAX, PHI_MIN, cameraBasis, cameraDistance, cameraEye, dragInCubeSpace, orbitBy, projectToScreen } from "../src/view/camera";
 import { resolveTurn } from "../src/view/drag";
+
+function facingPoint(theta: number, phi: number) {
+  const eye = cameraEye(theta, phi, 1);
+  const length = Math.hypot(eye.x, eye.y, eye.z) || 1;
+  return { x: (eye.x / length) * 1.25, y: (eye.y / length) * 1.25, z: (eye.z / length) * 1.25 };
+}
+
+function screenShift(
+  point: { x: number; y: number; z: number },
+  view: { theta: number; phi: number },
+  dx: number,
+  dy: number,
+) {
+  const before = projectToScreen(point, 500, 500, view.theta, view.phi);
+  const next = orbitBy(view.theta, view.phi, dx, dy, 500, 500);
+  const after = projectToScreen(point, 500, 500, next.theta, next.phi);
+  return { x: after.x - before.x, y: after.y - before.y };
+}
 
 describe("camera projection", () => {
   it("matches the three.js camera used to draw the cube", () => {
@@ -28,6 +46,44 @@ describe("camera projection", () => {
     expect(drag.x).toBeCloseTo(threeDrag.x, 4);
     expect(drag.y).toBeCloseTo(threeDrag.y, 4);
     expect(drag.z).toBeCloseTo(threeDrag.z, 4);
+  });
+
+  it("moves the grabbed surface with the finger, on every axis", () => {
+    const views = [
+      { theta: HOME_THETA, phi: HOME_PHI },
+      orbitBy(HOME_THETA, HOME_PHI, 90, -40, 500, 500),
+      { theta: HOME_THETA + 1.1, phi: 1.4 },
+    ];
+    for (const view of views) {
+      const grabbed = facingPoint(view.theta, view.phi);
+      expect(screenShift(grabbed, view, 30, 0).x).toBeGreaterThan(12);
+      expect(screenShift(grabbed, view, -30, 0).x).toBeLessThan(-12);
+      expect(screenShift(grabbed, view, 0, 30).y).toBeGreaterThan(12);
+      expect(screenShift(grabbed, view, 0, -30).y).toBeLessThan(-12);
+      const diagonal = screenShift(grabbed, view, 24, -24);
+      expect(diagonal.x).toBeGreaterThan(8);
+      expect(diagonal.y).toBeLessThan(-8);
+    }
+  });
+
+  it("tracks a slow drag without a jump and stops at the poles", () => {
+    const front = { x: 0.2, y: 0, z: 1.3 };
+    let theta = HOME_THETA;
+    let phi = HOME_PHI;
+    let previous = 0;
+    for (let step = 0; step < 12; step++) {
+      const shift = screenShift(front, { theta, phi }, 4, 0);
+      expect(shift.x).toBeGreaterThan(1);
+      if (step > 0) expect(shift.x).toBeLessThan(previous * 1.8);
+      previous = shift.x;
+      const next = orbitBy(theta, phi, 4, 0, 500, 500);
+      theta = next.theta;
+      phi = next.phi;
+    }
+    expect(orbitBy(HOME_THETA, PHI_MIN, 0, 80, 500, 500).phi).toBe(PHI_MIN);
+    expect(Math.abs(screenShift(front, { theta: HOME_THETA, phi: PHI_MIN }, 0, 80).y)).toBeLessThan(0.5);
+    expect(orbitBy(HOME_THETA, PHI_MAX, 0, -80, 500, 500).phi).toBe(PHI_MAX);
+    expect(Math.abs(screenShift(front, { theta: HOME_THETA, phi: PHI_MAX }, 0, -80).y)).toBeLessThan(0.5);
   });
 
   it("keeps a top-edge drag as U after the view turns", () => {

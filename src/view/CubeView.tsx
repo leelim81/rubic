@@ -3,6 +3,7 @@ import { CubeScene, type CubeGesture } from "./cubeScene";
 
 export interface CubeHandle {
   animate: (move: string, nextFacelets: string) => Promise<void>;
+  show: (facelets: string) => void;
   resetView: () => void;
 }
 
@@ -15,10 +16,11 @@ interface Props {
   onTurn?: (move: string) => void;
   onViewShift?: (shifted: boolean) => void;
   onGesture?: (message: string | null) => void;
+  turnMs?: number;
 }
 
 export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
-  { facelets, highlight = [], letters, gesture, label, onTurn, onViewShift, onGesture },
+  { facelets, highlight = [], letters, gesture, label, onTurn, onViewShift, onGesture, turnMs = 750 },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,7 +30,7 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const scene = new CubeScene(canvas, { reducedMotion: reduced, letters, gesture, onTurn, onViewShift, onGesture });
+    const scene = new CubeScene(canvas, { reducedMotion: reduced, letters, gesture, onTurn, onViewShift, onGesture, turnMs });
     sceneRef.current = scene;
     scene.setFacelets(facelets);
     scene.setHighlight(highlight);
@@ -41,8 +43,8 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   }, []);
 
   useEffect(() => {
-    sceneRef.current?.setOptions({ letters, gesture, reducedMotion: reduced, onTurn, onViewShift, onGesture });
-  }, [letters, gesture, reduced, onTurn, onViewShift, onGesture]);
+    sceneRef.current?.setOptions({ letters, gesture, reducedMotion: reduced, onTurn, onViewShift, onGesture, turnMs });
+  }, [letters, gesture, reduced, onTurn, onViewShift, onGesture, turnMs]);
 
   useEffect(() => {
     sceneRef.current?.setFacelets(facelets);
@@ -56,9 +58,9 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
     animate: async (move: string, nextFacelets: string) => {
       const scene = sceneRef.current;
       if (!scene) return;
-      await scene.animateMove(move);
-      scene.setFacelets(nextFacelets);
+      await scene.animateMove(move, nextFacelets);
     },
+    show: (next: string) => sceneRef.current?.setFacelets(next),
     resetView: () => sceneRef.current?.resetView(),
   }));
 
