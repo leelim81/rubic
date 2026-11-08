@@ -101,7 +101,16 @@ export class CubeScene {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas.parentElement ?? canvas);
     this.resize();
-    (this.canvas as HTMLCanvasElement & { __rubicSample?: () => unknown }).__rubicSample = () => this.sampleCubies();
+    const exposed = this.canvas as HTMLCanvasElement & {
+      __rubicSample?: () => unknown;
+      __rubicHit?: (x: number, y: number) => { x: number; y: number; z: number } | null;
+    };
+    exposed.__rubicSample = () => this.sampleCubies();
+    exposed.__rubicHit = (x, y) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const hit = this.pick({ clientX: rect.left + x, clientY: rect.top + y } as PointerEvent);
+      return hit ? { x: hit.normal.x, y: hit.normal.y, z: hit.normal.z } : null;
+    };
     this.canvas.addEventListener("pointerdown", this.onDown, { passive: false });
     this.canvas.addEventListener("pointermove", this.onMove, { passive: false });
     this.canvas.addEventListener("pointerup", this.onUp);
