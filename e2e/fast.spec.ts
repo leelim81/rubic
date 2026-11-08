@@ -1,8 +1,11 @@
-import { expect, test } from "@playwright/test";
-import { applyMoves, faceletsToString, solvedBytes } from "../src/cube/model";
+import { expect, test, type Page } from "@playwright/test";
+import { applyMoves, faceletsToString, invertAlg, solvedBytes } from "../src/cube/model";
 import { emptyLesson, withSolution } from "../src/state/lesson";
 
 const SOLVED = faceletsToString(solvedBytes());
+/** Thirty real moves. The inverse is a legal cube, and playing the sequence solves it. At 3× that is about 7.5s. */
+const SEXY = ["R", "U", "R'", "U'"];
+const SOLVE = [...SEXY, ...SEXY, ...SEXY, ...SEXY, ...SEXY, ...SEXY, "F", "R", "U", "R'", "U'", "F'"];
 
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
@@ -19,7 +22,8 @@ test.afterEach(async ({ page }) => {
   expect((page as unknown as { __errors?: string[] }).__errors ?? []).toEqual([]);
 });
 
-test("solve 3× animates from the current step and restore returns there", async ({ page }) => {
+test("component race: a second Solve 3× click does not replace the checkpoint", async ({ page }) => {
+  test.info().annotations.push({ type: "kind", description: "Dispatched click, not a pointer. Checks the in-flight lock only." });
   const start = faceletsToString(applyMoves(solvedBytes(), ["R", "U"]));
   await install(page, start, ["U'", "R'"]);
   await page.getByRole("button", { name: /^Next/ }).click();
@@ -46,24 +50,84 @@ test("solve 3× animates from the current step and restore returns there", async
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
   await page.waitForFunction(() => (window as unknown as { __frames?: unknown }).__frames);
   const frames = await page.evaluate(() => (window as unknown as { __frames: { animating: boolean; angle: number }[] }).__frames);
-  expect(frames?.some((frame) => frame.animating && Math.abs(frame.angle) > 0.2)).toBe(true);
+  expect(frames.some((frame) => frame.animating && Math.abs(frame.angle) > 0.2)).toBe(true);
   await page.getByTestId("restore-solve").click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(mid ?? "");
   await page.getByTestId("restore-solve").click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(mid ?? "");
 });
 
-test("stop and a later solve keep the pre-run cube", async ({ page }) => {
-  const start = faceletsToString(applyMoves(solvedBytes(), ["F"]));
-  await install(page, start, ["R", "U", "R'", "U'", "F", "U", "F'", "U'", "L", "U", "L'", "U'", "B", "U", "B'", "U'"]);
+test("a pointer click stops a long valid solve and restore returns that start", async ({ page }, testInfo) => {
+  const start = faceletsToString(applyMoves(solvedBytes(), invertAlg(SOLVE)));
+  expect(faceletsToString(applyMoves(applyMoves(solvedBytes(), invertAlg(SOLVE)), SOLVE))).toBe(SOLVED);
+  await install(page, start, SOLVE);
+  const stop = page.getByTestId("stop-solve");
+  const restore = page.getByTestId("restore-solve");
+  const before = await stop.boundingBox();
+  expect(before).toBeTruthy();
   await page.getByTestId("solve-fast").click();
-  await page.waitForFunction(() => document.querySelector("[data-testid='stop-solve']"));
-  await page.evaluate(() => (document.querySelector("[data-testid='stop-solve']") as HTMLButtonElement).click());
-  await page.getByTestId("restore-solve").click();
+  await expect(page.getByTestId("lesson-facelets")).not.toHaveText(start, { timeout: 8_000 });
+  await expect(stop).toBeEnabled();
+  await expect(restore).toBeEnabled();
+  const running = await stop.boundingBox();
+  const restoreBox = await restore.boundingBox();
+  const view = page.viewportSize();
+  expect(view).toBeTruthy();
+  expect(inView(running, view!)).toBe(true);
+  expect(inView(restoreBox, view!)).toBe(true);
+  const controls = await page.locator(".controls").boundingBox();
+  const cube = await page.locator(".cube-frame").boundingBox();
+  const gap = (controls?.y ?? 0) - ((cube?.y ?? 0) + (cube?.height ?? 0));
+  const scrollY = await page.evaluate(() => window.scrollY);
+  expect(gap, `gap ${gap} scrollY ${scrollY} cube ${JSON.stringify(cube)} controls ${JSON.stringify(controls)}`).toBeGreaterThan(4);
+  expect(scrollY).toBeLessThan(3);
+  expect(Math.abs((running?.y ?? 0) - (before?.y ?? 0))).toBeLessThan(3);
+  await page.waitForTimeout(250);
+  const still = await stop.boundingBox();
+  expect(Math.abs((still?.y ?? 0) - (running?.y ?? 0))).toBeLessThan(3);
+  if (testInfo.project.name === "mobile") await stop.tap();
+  else await stop.click();
+  const interrupted = await page.getByTestId("lesson-facelets").textContent();
+  expect(interrupted).not.toBe(SOLVED);
+  expect(interrupted).not.toBe(start);
+  if (testInfo.project.name === "mobile") await restore.tap();
+  else await restore.click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(start);
+  const turn = page.getByRole("button", { name: "Turn a face" });
+  await placeAbove(page, turn, ".controls");
+  const turnBox = await turn.boundingBox();
+  const bar = await page.locator(".controls").boundingBox();
+  expect(overlaps(turnBox, bar)).toBe(false);
+  expect(inView(turnBox, view!)).toBe(true);
+  if (testInfo.project.name === "mobile") await turn.tap();
+  else await turn.click();
+  await expect(turn).toHaveAttribute("aria-pressed", "true");
 });
 
-async function install(page: import("@playwright/test").Page, start: string, moves: string[]) {
+async function placeAbove(page: Page, target: ReturnType<Page["getByRole"]>, barSelector: string) {
+  await target.scrollIntoViewIfNeeded();
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const box = await target.boundingBox();
+    const bar = await page.locator(barSelector).boundingBox();
+    if (!overlaps(box, bar)) return;
+    await page.evaluate((delta) => window.scrollBy(0, delta), (box!.y + box!.height) - bar!.y + 16);
+  }
+}
+
+function overlaps(
+  a: { x: number; y: number; width: number; height: number } | null,
+  b: { x: number; y: number; width: number; height: number } | null,
+) {
+  if (!a || !b) return false;
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function inView(box: { x: number; y: number; width: number; height: number } | null, view: { width: number; height: number }) {
+  if (!box) return false;
+  return box.x >= -1 && box.y >= -1 && box.x + box.width <= view.width + 1 && box.y + box.height <= view.height + 1;
+}
+
+async function install(page: Page, start: string, moves: string[]) {
   const lesson = withSolution(emptyLesson(SOLVED), start, {
     moves,
     chunkOfMove: moves.map(() => 0),

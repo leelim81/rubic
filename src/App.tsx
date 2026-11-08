@@ -76,7 +76,7 @@ export function App() {
 
   useLayoutEffect(() => {
     if (mode !== "cube") return;
-    document.getElementById("cube-title")?.scrollIntoView({ block: "start" });
+    document.getElementById("cube-title")?.scrollIntoView({ block: "nearest" });
   }, [lesson.start, mode]);
 
   async function run(task: () => Promise<void>) {
@@ -294,8 +294,8 @@ export function App() {
             <button type="button" onClick={() => void run(() => go(-1))} disabled={running || lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0 && !lesson.pending)}>Back</button>
             <button type="button" className="primary" onClick={() => void run(() => go(1))} disabled={running || lesson.busy || loading || (!nextMove && lesson.pending?.intent !== "do") || lesson.pending?.intent === "undo"}>Next{lesson.pending?.intent === "do" ? ` · ${lesson.pending.move}` : nextMove ? ` · ${nextMove}` : ""}</button>
             <button type="button" className="fast" data-testid="solve-fast" onClick={() => void solveFast()} disabled={running || lesson.busy || loading || !advanceLesson(lesson)}>Solve 3×</button>
-            {running ? <button type="button" data-testid="stop-solve" onClick={stopSolve}>Stop</button> : null}
-            <button type="button" data-testid="restore-solve" onClick={restoreSolve} disabled={!checkpoint}>Restore before solve</button>
+            <button type="button" className="stop" data-testid="stop-solve" onClick={stopSolve} disabled={!running}>Stop</button>
+            <button type="button" className="restore" data-testid="restore-solve" onClick={restoreSolve} disabled={!checkpoint} aria-label="Restore before solve"><span className="restore-long">Restore before solve</span><span className="restore-short">Restore</span></button>
           </div>
           {gestureNote ? <p className="notice" role="status">{gestureNote}</p> : null}
           {lesson.notice ? <p className="notice" role="status">{lesson.notice}</p> : null}
