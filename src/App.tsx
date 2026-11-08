@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { COLORS, type ColorName, type Face, applyMoves, faceletsToString, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { COLORS, type ColorName, type Face, applyMoves, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
 import { validateFaceletString } from "./cube/validate";
 import { holdText } from "./solver/beginner";
 import { solveInWorker } from "./solveClient";
@@ -23,7 +23,6 @@ import {
 import { CubeView, type CubeHandle } from "./view/CubeView";
 import { Disclosure } from "./view/Disclosure";
 import { ScanFlow } from "./view/ScanFlow";
-import { TeachingPanel } from "./view/TeachingPanel";
 
 const SOLVED = faceletsToString(solvedBytes());
 const STORAGE = "rubic-lesson-v1";
@@ -38,6 +37,8 @@ export function App() {
   const [gestureNote, setGestureNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const cubeRef = useRef<CubeHandle>(null);
+  const flight = useRef(false);
+  const [turnMs, setTurnMs] = useState(750);
   const facelets = currentFacelets(lesson);
   const nextMove = lesson.moves[lesson.cursor];
   const labels = progressLabel(lesson);
@@ -58,17 +59,32 @@ export function App() {
       const key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
       if ("UDRLFB".includes(key) && key.length === 1) {
         event.preventDefault();
-        void userTurn(event.shiftKey ? `${key}'` : key);
+        void run(() => userTurn(event.shiftKey ? `${key}'` : key));
         return;
       }
-      if (event.key === "n" || event.key === "N") void go(1);
-      if (event.key === "p" || event.key === "P" || event.key === "Backspace") void go(-1);
+      if (event.key === "n" || event.key === "N") void run(() => go(1));
+      if (event.key === "p" || event.key === "P" || event.key === "Backspace") void run(() => go(-1));
       if (event.key === "?" ) setMode("primer");
       if (event.key === "Escape") setMode("learn");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [mode, lesson, loading, facelets, nextMove]);
+
+  useLayoutEffect(() => {
+    if (mode !== "learn") return;
+    document.getElementById("cube-title")?.scrollIntoView({ block: "start" });
+  }, [lesson.start, mode]);
+
+  async function run(task: () => Promise<void>) {
+    if (flight.current) return;
+    flight.current = true;
+    try {
+      await task();
+    } finally {
+      flight.current = false;
+    }
+  }
 
   async function load(start: string, notice: string | null = null) {
     setLoading(true);
@@ -77,7 +93,6 @@ export function App() {
       const solution = await solveInWorker(start);
       setLesson((current) => withSolution({ ...current, history: [] }, start, solution, notice));
       setMode("learn");
-      requestAnimationFrame(() => document.getElementById("cube-title")?.scrollIntoView({ block: "start" }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The lesson could not be prepared.");
     } finally {
@@ -158,7 +173,20 @@ export function App() {
     }
   }
 
+  async function replayMove() {
+    const move = lesson.cursor > 0 ? lesson.moves[lesson.cursor - 1] : nextMove;
+    if (!move) return;
+    const after = lesson.cursor > 0 ? facelets : applyUserMove(facelets, move);
+    const before = lesson.cursor > 0 ? currentFacelets({ ...lesson, cursor: lesson.cursor - 1, pending: null, busy: false }) : facelets;
+    setLesson((current) => beginAnimation(current));
+    cubeRef.current?.show(before);
+    await cubeRef.current?.animate(move, after);
+    if (lesson.cursor === 0) await cubeRef.current?.animate(invert(move), facelets);
+    setLesson((current) => endAnimation(current));
+  }
+
   const solved = faceletsIsSolved(facelets);
+  const moveLine = nextMove ? plainMove(nextMove) : lesson.cursor > 0 ? plainMove(lesson.moves[lesson.cursor - 1] ?? "") : "";
 
   return (
     <div className="app">
@@ -183,6 +211,8 @@ export function App() {
             <p id="cube-title">{labels.stage}</p>
             <p data-testid="lesson-step">{labels.step}</p>
           </div>
+          {demo?.chunk ? <p className="goal">{demo.chunk.goal}</p> : null}
+          {moveLine ? <p className="move-line" data-testid="move-line">{moveLine}</p> : null}
           <div className="gesture-toggle" role="group" aria-label="How a drag on the cube behaves">
             <button type="button" className={gesture === "view" ? "on" : ""} aria-pressed={gesture === "view"} onClick={() => setGesture("view")}>Rotate view</button>
             <button type="button" className={gesture === "turn" ? "on" : ""} aria-pressed={gesture === "turn"} onClick={() => setGesture("turn")}>Turn a face</button>
@@ -200,23 +230,33 @@ export function App() {
               letters={letters}
               gesture={gesture}
               label={cubeLabel(facelets, nextMove)}
-              onTurn={(move) => void userTurn(move)}
+              onTurn={(move) => void run(() => userTurn(move))}
               onViewShift={onViewShift}
               onGesture={onGesture}
+              turnMs={turnMs}
             />
           </div>
           <p className="sr-only" data-testid="lesson-facelets">{facelets}</p>
           <p className="hold-banner">{holdText(stringToFacelets(facelets))}</p>
           {viewShift ? <p className="view-warning" role="status">The view has moved. Face buttons and lesson moves still use the hold above, not whichever side faces the screen. <button type="button" onClick={() => cubeRef.current?.resetView()}>Reset view</button></p> : null}
           <div className="controls">
-            <button type="button" onClick={() => void go(-1)} disabled={lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0)}>Back</button>
-            <button type="button" className="primary" onClick={() => void go(1)} disabled={lesson.busy || loading || (!nextMove && lesson.pending?.intent !== "do") || lesson.pending?.intent === "undo"}>Next{lesson.pending?.intent === "do" ? ` · ${lesson.pending.move}` : nextMove ? ` · ${nextMove}` : ""}</button>
+            <button type="button" onClick={() => void run(() => go(-1))} disabled={lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0 && !lesson.pending)}>Back</button>
+            <button type="button" className="primary" onClick={() => void run(() => go(1))} disabled={lesson.busy || loading || (!nextMove && lesson.pending?.intent !== "do") || lesson.pending?.intent === "undo"}>Next{lesson.pending?.intent === "do" ? ` · ${lesson.pending.move}` : nextMove ? ` · ${nextMove}` : ""}</button>
+            <button type="button" onClick={() => void run(() => replayMove())} disabled={lesson.busy || loading || (!nextMove && lesson.cursor === 0)}>Replay move</button>
           </div>
+          <label className="speed-label">
+            Speed
+            <select aria-label="Turn speed" value={turnMs} onChange={(event) => setTurnMs(Number(event.target.value))}>
+              <option value={900}>Slow</option>
+              <option value={750}>Normal</option>
+              <option value={600}>Fast</option>
+            </select>
+          </label>
           <Disclosure className="face-fallback" show="Show face buttons" hide="Hide face buttons" controls="face-buttons">
             <p className="quiet">These follow the hold above, even after you rotate the view. One piece cannot turn on its own.</p>
             <div className="face-pad" role="group" aria-label="Turn a face. These follow the hold, not the camera.">
               {FACE_BUTTONS.map((button) => (
-                <button key={button.move} type="button" onClick={() => void userTurn(button.move)} disabled={lesson.busy || loading} title={button.accessible}>
+                <button key={button.move} type="button" onClick={() => void run(() => userTurn(button.move))} disabled={lesson.busy || loading} title={button.accessible}>
                   {button.label} <span className="move-code">{button.move}</span>
                 </button>
               ))}
@@ -239,15 +279,8 @@ export function App() {
             Letter stickers (W Y R O B G) as well as colour
           </label>
           {reduced ? <p className="quiet">Reduced motion is on. Moves jump to the next state, and the move letter is still announced above.</p> : null}
-          <p className="quiet">Next does the move in this step. Its opposite steps back. A different turn leaves the lesson as it is.</p>
+          <p className="quiet">Next turns one layer. Back turns it the other way. Replay shows that move again.</p>
         </section>
-        <TeachingPanel
-          facelets={facelets}
-          chunk={demo?.chunk ?? null}
-          suffix={demo?.suffix ?? []}
-          doneInChunk={demo?.doneInChunk ?? 0}
-          solved={solved && (lesson.moves.length === 0 || lesson.cursor === lesson.moves.length)}
-        />
       </main>
       <footer>
         <p>Ordinary Western 3×3 only: white opposite yellow, red opposite orange, blue opposite green, with red on the right when white is on top and green is in front. Photos and colours stay in this browser. No account, no upload, no claim that a short computer solution is optimal — this lesson teaches a beginner layer-by-layer method.</p>
@@ -353,6 +386,14 @@ const FACE_BUTTONS: { move: string; label: string; accessible: string }[] = [
   { move: "B", label: "Back, top edge left", accessible: "Turn the back face so its top edge, seen from the front, moves left. Notation B." },
   { move: "B'", label: "Back, top edge right", accessible: "Turn the back face so its top edge, seen from the front, moves right. Notation B prime." },
 ];
+
+function plainMove(move: string): string {
+  if (move.endsWith("2")) {
+    const face = move[0] ?? "";
+    return `${move}. Half turn: ${moveDirection(face)} and then the same way again.`;
+  }
+  return `${move}. ${moveDirection(move)}.`;
+}
 
 function invert(move: string): string {
   if (!move) return "";

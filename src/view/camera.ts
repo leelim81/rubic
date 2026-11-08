@@ -7,9 +7,22 @@ const FIT_FOV = 34;
 
 export const HOME_THETA = 0.62;
 export const HOME_PHI = 1.02;
-export const ORBIT_SPEED = 0.008;
+/** Keep the camera off the poles so the view does not flip. */
+export const PHI_MIN = 0.25;
+export const PHI_MAX = 2.6;
 /** A shorter drag is a cancelled gesture, not a face turn. */
 export const TURN_DRAG_PX = 28;
+
+/**
+ * Radians per CSS pixel. Chosen so a sticker on the cube moves about one
+ * screen pixel per pixel of finger travel, on a large canvas or a phone.
+ */
+export function orbitSpeed(width: number, height: number): number {
+  const aspect = Math.max(0.45, width / Math.max(1, height));
+  const radius = cameraDistance(aspect);
+  const focal = (Math.max(1, height) / 2) / Math.tan((CAMERA_FOV * Math.PI) / 180 / 2);
+  return radius / (1.15 * focal);
+}
 
 export function cameraDistance(aspect: number): number {
   const safe = Math.max(0.45, aspect || 1);
@@ -41,10 +54,18 @@ export function dragInCubeSpace(dx: number, dy: number, theta: number, phi: numb
   return add(scale(right, dx), scale(up, -dy));
 }
 
-export function orbitBy(theta: number, phi: number, dx: number, dy: number): { theta: number; phi: number } {
+export function orbitBy(
+  theta: number,
+  phi: number,
+  dx: number,
+  dy: number,
+  width = 500,
+  height = 500,
+): { theta: number; phi: number } {
+  const speed = orbitSpeed(width, height);
   return {
-    theta: theta - dx * ORBIT_SPEED,
-    phi: Math.min(2.6, Math.max(0.25, phi + dy * ORBIT_SPEED)),
+    theta: theta - dx * speed,
+    phi: Math.min(PHI_MAX, Math.max(PHI_MIN, phi - dy * speed)),
   };
 }
 

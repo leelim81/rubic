@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { type ColorName, type Face, FACES, faceOffset, stringToFacelets } from "../cube/model";
 import { SLOTS } from "../cube/model";
-import { cameraBasis, cameraDistance, HOME_PHI, HOME_THETA, ORBIT_SPEED, TURN_DRAG_PX, viewIsShifted } from "./camera";
+import { cameraBasis, cameraDistance, HOME_PHI, HOME_THETA, orbitBy, TURN_DRAG_PX, viewIsShifted } from "./camera";
 import { resolveTurn } from "./drag";
 
 const STICKER: Record<ColorName, string> = {
@@ -56,6 +56,7 @@ export interface CubeSceneOptions {
   onTurn?: (move: string) => void;
   onViewShift?: (shifted: boolean) => void;
   onGesture?: (message: string | null) => void;
+  turnMs?: number;
 }
 
 export class CubeScene {
@@ -73,6 +74,8 @@ export class CubeScene {
   private pointer = { x: 0, y: 0 };
   private hit: { position: THREE.Vector3; normal: THREE.Vector3 } | null = null;
   private highlight = new Set<number>();
+  private activePivot: THREE.Group | null = null;
+  private activeAxis: "x" | "y" | "z" | null = null;
   private facelets = "";
   private disposed = false;
   private animating = false;
@@ -82,7 +85,7 @@ export class CubeScene {
 
   constructor(private canvas: HTMLCanvasElement, options: CubeSceneOptions) {
     this.options = options;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.camera = new THREE.PerspectiveCamera(32, 1, 0.1, 40);
@@ -98,8 +101,18 @@ export class CubeScene {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas.parentElement ?? canvas);
     this.resize();
-    this.canvas.addEventListener("pointerdown", this.onDown);
-    this.canvas.addEventListener("pointermove", this.onMove);
+    const exposed = this.canvas as HTMLCanvasElement & {
+      __rubicSample?: () => unknown;
+      __rubicHit?: (x: number, y: number) => { x: number; y: number; z: number } | null;
+    };
+    exposed.__rubicSample = () => this.sampleCubies();
+    exposed.__rubicHit = (x, y) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const hit = this.pick({ clientX: rect.left + x, clientY: rect.top + y } as PointerEvent);
+      return hit ? { x: hit.normal.x, y: hit.normal.y, z: hit.normal.z } : null;
+    };
+    this.canvas.addEventListener("pointerdown", this.onDown, { passive: false });
+    this.canvas.addEventListener("pointermove", this.onMove, { passive: false });
     this.canvas.addEventListener("pointerup", this.onUp);
     this.canvas.addEventListener("pointercancel", this.onCancel);
     this.frame = requestAnimationFrame(this.loop);
@@ -112,8 +125,10 @@ export class CubeScene {
 
   setFacelets(facelets: string) {
     this.facelets = facelets;
+    if (this.animating) return;
     this.resetCubies();
     this.paint(facelets);
+    this.renderer.render(this.scene, this.camera);
   }
 
   setHighlight(indexes: number[]) {
@@ -121,19 +136,32 @@ export class CubeScene {
     this.paint(this.facelets);
   }
 
-  async animateMove(move: string): Promise<void> {
+  async animateMove(move: string, nextFacelets?: string): Promise<void> {
     const spec = moveSpec(move);
-    if (!spec || this.options.reducedMotion) return;
+    const settle = nextFacelets || this.facelets;
+    if (!spec || this.options.reducedMotion) {
+      if (settle) this.setFacelets(settle);
+      return;
+    }
     this.animating = true;
     const pivot = new THREE.Group();
+    this.activePivot = pivot;
+    this.activeAxis = spec.axis;
     this.scene.add(pivot);
     const moving = this.cubies.filter((cubie) => spec.layer(cubie.home[spec.axis]));
-    for (const cubie of moving) pivot.attach(cubie.mesh);
+    for (const cubie of moving) {
+      pivot.attach(cubie.mesh);
+      for (const sticker of cubie.stickers) sticker.material.emissiveIntensity = 0.72;
+    }
     await this.tween(pivot, spec.axis, spec.angle);
     this.scene.remove(pivot);
+    this.activePivot = null;
+    this.activeAxis = null;
     this.resetCubies();
+    if (settle) this.facelets = settle;
     if (this.facelets) this.paint(this.facelets);
     this.animating = false;
+    this.renderer.render(this.scene, this.camera);
   }
 
   resetView() {
@@ -247,18 +275,38 @@ export class CubeScene {
   }
 
   private tween(pivot: THREE.Group, axis: "x" | "y" | "z", angle: number) {
-    const duration = 280;
+    const duration = Math.max(160, this.options.turnMs ?? 750);
     const start = performance.now();
     return new Promise<void>((resolve) => {
       const step = (now: number) => {
         const t = Math.min(1, (now - start) / duration);
         const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
         pivot.rotation[axis] = angle * eased;
+        this.renderer.render(this.scene, this.camera);
         if (t < 1 && !this.disposed) requestAnimationFrame(step);
         else resolve();
       };
       requestAnimationFrame(step);
     });
+  }
+
+  private sampleCubies() {
+    return {
+      animating: this.animating,
+      angle: this.activePivot && this.activeAxis ? this.activePivot.rotation[this.activeAxis] : 0,
+      cubies: this.cubies.map((cubie) => {
+        const position = new THREE.Vector3();
+        cubie.mesh.getWorldPosition(position);
+        return {
+          hx: cubie.home.x,
+          hy: cubie.home.y,
+          hz: cubie.home.z,
+          x: position.x,
+          y: position.y,
+          z: position.z,
+        };
+      }),
+    };
   }
 
   private resize = () => {
@@ -304,16 +352,22 @@ export class CubeScene {
     } catch {
       // Dispatched test events have no active pointer. The listeners still run.
     }
+    if (this.options.gesture === "view") event.preventDefault();
   };
 
   private onMove = (event: PointerEvent) => {
     if (!this.dragging || this.animating || this.options.gesture !== "view") return;
     const dx = event.clientX - this.pointer.x;
     const dy = event.clientY - this.pointer.y;
-    this.theta -= dx * ORBIT_SPEED;
-    this.phi = Math.min(2.6, Math.max(0.25, this.phi + dy * ORBIT_SPEED));
+    if (dx === 0 && dy === 0) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const next = orbitBy(this.theta, this.phi, dx, dy, rect.width, rect.height);
+    this.theta = next.theta;
+    this.phi = next.phi;
     this.pointer = { x: event.clientX, y: event.clientY };
     this.updateCamera();
+    this.renderer.render(this.scene, this.camera);
+    event.preventDefault();
   };
 
   private onUp = (event: PointerEvent) => {

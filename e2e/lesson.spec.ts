@@ -34,19 +34,6 @@ test("show and hide controls are buttons you can use from the keyboard", async (
   await faces.click();
   await expect(faces).toHaveText("Show face buttons");
   await expect(faces).toHaveAttribute("aria-expanded", "false");
-
-  await page.getByRole("button", { name: "Scramble" }).click();
-  const why = page.locator("details.more summary");
-  await expect(why).toHaveText("Show why this step", { timeout: 20_000 });
-  await expect(why).toHaveAttribute("aria-expanded", "false");
-  await why.focus();
-  await page.keyboard.press("Enter");
-  await expect(why).toHaveText("Hide why this step");
-  await expect(why).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByText("On this cube.")).toBeVisible();
-  await page.keyboard.press("Enter");
-  await expect(why).toHaveText("Show why this step");
-  await expect(why).toHaveAttribute("aria-expanded", "false");
 });
 
 test("scramble, next, back, and demonstration stay in step", async ({ page }, testInfo) => {
@@ -59,7 +46,7 @@ test("scramble, next, back, and demonstration stay in step", async ({ page }, te
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(step).toHaveText(before ?? "");
   await page.screenshot({ path: testInfo.project.name === "mobile" ? "/tmp/rubic-mobile-lesson.png" : "/tmp/rubic-desktop-lesson.png", fullPage: true });
-  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.getByRole("button", { name: "Replay move" }).click();
   await page.waitForTimeout(400);
   await expect(step).toHaveText(before ?? "");
 });
