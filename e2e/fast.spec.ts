@@ -55,9 +55,10 @@ test("solve 3× animates from the current step and restore returns there", async
 
 test("stop and a later solve keep the pre-run cube", async ({ page }) => {
   const start = faceletsToString(applyMoves(solvedBytes(), ["F"]));
-  await install(page, start, ["F'", "U", "U'", "R", "R'", "F", "F'", "U", "U'"]);
+  await install(page, start, ["R", "U", "R'", "U'", "F", "U", "F'", "U'", "L", "U", "L'", "U'", "B", "U", "B'", "U'"]);
   await page.getByTestId("solve-fast").click();
-  await page.getByTestId("stop-solve").click();
+  await page.waitForFunction(() => document.querySelector("[data-testid='stop-solve']"));
+  await page.evaluate(() => (document.querySelector("[data-testid='stop-solve']") as HTMLButtonElement).click());
   await page.getByTestId("restore-solve").click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(start);
 });
