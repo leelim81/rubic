@@ -9,6 +9,25 @@ function facingPoint(theta: number, phi: number) {
   return { x: (eye.x / length) * 1.25, y: (eye.y / length) * 1.25, z: (eye.z / length) * 1.25 };
 }
 
+function measure(
+  size: number,
+  view: { theta: number; phi: number },
+  dx: number,
+  dy: number,
+) {
+  const point = facingPoint(view.theta, view.phi);
+  const before = projectToScreen(point, size, size, view.theta, view.phi);
+  const next = orbitBy(view.theta, view.phi, dx, dy, size, size);
+  const after = projectToScreen(point, size, size, next.theta, next.phi);
+  return {
+    surface: Math.hypot(after.x - before.x, after.y - before.y),
+    turn: Math.hypot(next.theta - view.theta, next.phi - view.phi),
+    sx: after.x - before.x,
+    sy: after.y - before.y,
+    next,
+  };
+}
+
 function screenShift(
   point: { x: number; y: number; z: number },
   view: { theta: number; phi: number },
@@ -63,6 +82,54 @@ describe("camera projection", () => {
       const diagonal = screenShift(grabbed, view, 24, -24);
       expect(diagonal.x).toBeGreaterThan(8);
       expect(diagonal.y).toBeLessThan(-8);
+    }
+  });
+
+  it("keeps a 20px drag to a bounded turn, including a diagonal", () => {
+    // Desktop 1280×800 uses a 400px cube; a phone cube is about 379px.
+    // Gain is linear: the facing surface moves about one screen pixel per
+    // finger pixel. A diagonal is the same rate on both axes, not a faster one.
+    const sizes = [400, 379];
+    const drags = [
+      { dx: 20, dy: 0 },
+      { dx: 0, dy: -20 },
+      { dx: 0, dy: 20 },
+      { dx: 14, dy: -14 },
+    ];
+    for (const size of sizes) {
+      const views = [
+        { theta: HOME_THETA, phi: HOME_PHI },
+        { theta: HOME_THETA, phi: HOME_PHI - 0.12 },
+        orbitBy(HOME_THETA, HOME_PHI, 70, -24, size, size),
+      ];
+      for (const view of views) {
+        for (const drag of drags) {
+          const moved = measure(size, view, drag.dx, drag.dy);
+          const finger = Math.hypot(drag.dx, drag.dy);
+          expect(moved.surface).toBeGreaterThan(finger * 0.85);
+          expect(moved.surface).toBeLessThan(finger * 1.35);
+          expect(moved.turn).toBeGreaterThan(0.18);
+          expect(moved.turn).toBeLessThan(0.42);
+          if (drag.dx > 0) expect(moved.sx).toBeGreaterThan(8);
+          if (drag.dy < 0) expect(moved.sy).toBeLessThan(-8);
+          if (drag.dy > 0) expect(moved.sy).toBeGreaterThan(8);
+        }
+        const small = measure(size, view, 20, 0);
+        const large = measure(size, view, 80, 0);
+        expect(large.surface).toBeGreaterThan(small.surface);
+        expect(large.turn).toBeGreaterThan(small.turn * 3.2);
+        expect(large.turn).toBeLessThan(small.turn * 4.5);
+      }
+      let stepped = { theta: HOME_THETA, phi: HOME_PHI };
+      let previous = 0;
+      for (let step = 0; step < 20; step++) {
+        const moved = measure(size, stepped, 1, -1);
+        expect(moved.surface).toBeGreaterThan(1);
+        expect(moved.surface).toBeLessThan(2.4);
+        if (step > 0) expect(moved.surface).toBeLessThan(previous * 1.25);
+        previous = moved.surface;
+        stepped = moved.next;
+      }
     }
   });
 

@@ -210,13 +210,13 @@ test("an upward drag on the right face turns that face, including after the view
   await expect(page.getByText("This cube is solved")).toBeVisible();
   await page.getByRole("button", { name: "Rotate view" }).click();
   const again = await frame(page);
-  const orbit = Math.round(again.box.width * 0.045);
+  const orbit = 16;
   await mouseDrag(page, again.box, { x: again.box.width * 0.55, y: again.box.height * 0.5 }, { x: again.box.width * 0.55 + orbit, y: again.box.height * 0.5 });
   const view = orbitBy(HOME_THETA, HOME_PHI, orbit, 0, again.box.width, again.box.height);
   await page.getByRole("button", { name: "Turn a face" }).click();
   const placed = await frame(page);
   const shifted = await pointOnFace(placed.canvas, projectToScreen({ x: 1.48, y: 0, z: 0 }, placed.box.width, placed.box.height, view.theta, view.phi), { x: 1, y: 0, z: 0 });
-  await mouseDrag(page, placed.box, shifted, { x: shifted.x, y: shifted.y - 55 });
+  await dragOnCanvas(placed.canvas, shifted, { x: shifted.x, y: shifted.y - 60 });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(turned, { timeout: 15_000 });
 });
 
@@ -359,6 +359,25 @@ async function dragCanvas(page: Page, canvas: Locator, dx: number, dy: number) {
   if (!box) throw new Error("The lesson cube is not on screen.");
   const from = { x: box.width * 0.5, y: box.height * 0.48 };
   await mouseDrag(page, box, from, { x: from.x + dx, y: from.y + dy });
+}
+
+async function dragOnCanvas(canvas: Locator, from: { x: number; y: number }, to: { x: number; y: number }) {
+  await canvas.evaluate((el, drag) => {
+    const rect = el.getBoundingClientRect();
+    const fire = (type: string, x: number, y: number, buttons: number) => {
+      el.dispatchEvent(new PointerEvent(type, {
+        clientX: rect.left + x,
+        clientY: rect.top + y,
+        pointerId: 1,
+        pointerType: "mouse",
+        bubbles: true,
+        buttons,
+      }));
+    };
+    fire("pointerdown", drag.fromX, drag.fromY, 1);
+    fire("pointermove", drag.toX, drag.toY, 1);
+    fire("pointerup", drag.toX, drag.toY, 0);
+  }, { fromX: from.x, fromY: from.y, toX: to.x, toY: to.y });
 }
 
 async function mouseDrag(page: Page, box: { x: number; y: number }, from: { x: number; y: number }, to: { x: number; y: number }) {
