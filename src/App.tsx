@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { COLORS, type ColorName, type Face, applyMoves, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
 import { validateFaceletString } from "./cube/validate";
 import { holdText } from "./solver/beginner";
@@ -71,6 +71,11 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [mode, lesson, loading, facelets, nextMove]);
 
+  useLayoutEffect(() => {
+    if (mode !== "learn") return;
+    document.getElementById("cube-title")?.scrollIntoView({ block: "start" });
+  }, [lesson.start, mode]);
+
   async function run(task: () => Promise<void>) {
     if (flight.current) return;
     flight.current = true;
@@ -88,7 +93,6 @@ export function App() {
       const solution = await solveInWorker(start);
       setLesson((current) => withSolution({ ...current, history: [] }, start, solution, notice));
       setMode("learn");
-      requestAnimationFrame(() => document.getElementById("cube-title")?.scrollIntoView({ block: "start" }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The lesson could not be prepared.");
     } finally {

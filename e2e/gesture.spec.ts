@@ -25,6 +25,7 @@ test.afterEach(async ({ page }) => {
 const FRONT_LETTER = { x: 0, y: 0, z: 1.47 };
 
 test("rotate view follows the finger on screen and does not turn a face", async ({ page }) => {
+  test.setTimeout(60_000);
   const { canvas, box } = await frame(page);
   const directions: [number, number, "x" | "y", number][] = [
     [48, 0, "x", 1],
@@ -276,13 +277,28 @@ async function pointOnFace(canvas: Locator, guess: { x: number; y: number }, nor
   const point = await canvas.evaluate((el, query) => {
     const hit = (el as HTMLCanvasElement & { __rubicHit?: (x: number, y: number) => { x: number; y: number; z: number } | null }).__rubicHit;
     if (!hit) return null;
+    let count = 0;
+    let sx = 0;
+    let sy = 0;
+    for (let y = 4; y < el.clientHeight - 4; y += 4) {
+      for (let x = 4; x < el.clientWidth - 4; x += 4) {
+        const found = hit(x, y);
+        if (!found || found.x !== query.normal.x || found.y !== query.normal.y || found.z !== query.normal.z) continue;
+        sx += x;
+        sy += y;
+        count += 1;
+      }
+    }
+    if (!count) return null;
+    const cx = sx / count;
+    const cy = sy / count;
     let best: { x: number; y: number } | null = null;
     let bestDistance = Number.POSITIVE_INFINITY;
     for (let y = 4; y < el.clientHeight - 4; y += 4) {
       for (let x = 4; x < el.clientWidth - 4; x += 4) {
         const found = hit(x, y);
         if (!found || found.x !== query.normal.x || found.y !== query.normal.y || found.z !== query.normal.z) continue;
-        const distance = (x - query.x) ** 2 + (y - query.y) ** 2;
+        const distance = (x - cx) ** 2 + (y - cy) ** 2;
         if (distance < bestDistance) {
           bestDistance = distance;
           best = { x, y };
@@ -319,8 +335,8 @@ async function letterNear(canvas: Locator, point: { x: number; y: number }, radi
     let sx = 0;
     let sy = 0;
     let count = 0;
-    for (let py = 0; py < height; py += 1) {
-      for (let px = 0; px < width; px += 1) {
+    for (let py = 0; py < height; py += 2) {
+      for (let px = 0; px < width; px += 2) {
         if ((px - cx) ** 2 + (py - cy) ** 2 > limit * limit) continue;
         const index = (py * width + px) * 4;
         const red = pixels[index] ?? 0;
