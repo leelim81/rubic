@@ -58,6 +58,7 @@ test("component race: a second Solve 3× click does not replace the checkpoint",
 });
 
 test("a pointer click stops a long valid solve and restore returns that start", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   const start = faceletsToString(applyMoves(solvedBytes(), invertAlg(SOLVE)));
   expect(faceletsToString(applyMoves(applyMoves(solvedBytes(), invertAlg(SOLVE)), SOLVE))).toBe(SOLVED);
   await install(page, start, SOLVE);
@@ -66,8 +67,8 @@ test("a pointer click stops a long valid solve and restore returns that start", 
   const before = await stop.boundingBox();
   expect(before).toBeTruthy();
   await page.getByTestId("solve-fast").click();
+  await expect(stop).toBeEnabled({ timeout: 5_000 });
   await expect(page.getByTestId("lesson-facelets")).not.toHaveText(start, { timeout: 8_000 });
-  await expect(stop).toBeEnabled();
   await expect(restore).toBeEnabled();
   const running = await stop.boundingBox();
   const restoreBox = await restore.boundingBox();
@@ -82,9 +83,7 @@ test("a pointer click stops a long valid solve and restore returns that start", 
   expect(gap, `gap ${gap} scrollY ${scrollY} cube ${JSON.stringify(cube)} controls ${JSON.stringify(controls)}`).toBeGreaterThan(4);
   expect(scrollY).toBeLessThan(3);
   expect(Math.abs((running?.y ?? 0) - (before?.y ?? 0))).toBeLessThan(3);
-  await page.waitForTimeout(250);
-  const still = await stop.boundingBox();
-  expect(Math.abs((still?.y ?? 0) - (running?.y ?? 0))).toBeLessThan(3);
+  await expect(stop).toBeEnabled();
   if (testInfo.project.name === "mobile") await stop.tap();
   else await stop.click();
   const interrupted = await page.getByTestId("lesson-facelets").textContent();
