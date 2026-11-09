@@ -363,7 +363,7 @@ export function App() {
         ) : null}
       </header>
       <main>
-        <section className="stage-column" aria-labelledby="cube-title">
+        <section className={mode === "paint" ? "stage-column is-paint" : entered ? "stage-column" : "stage-column is-empty"} aria-labelledby="cube-title">
           {mode === "paint" ? <PaintStatus step={paintStep} cells={paintCells} error={paintError} /> : entered ? (
             <div className="status" aria-live="polite">
               <p id="cube-title" className="status-title" data-testid="lesson-step">{solving ? <><span className="mode-chip">{modeName}</span>{" · "}{headline.slice(modeName.length + 3)}</> : headline}</p>
