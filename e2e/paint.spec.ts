@@ -1,0 +1,95 @@
+import { expect, test } from "@playwright/test";
+import { applyMoves, faceletsToString, solvedBytes } from "../src/cube/model";
+import { PAINT_FACES, facePose, faceletIndex, isCentre } from "../src/view/paint";
+import { paintSticker, waitForFace } from "./paint-click";
+
+const SOLVED = faceletsToString(solvedBytes());
+const NAMES: Record<string, string> = { w: "white", y: "yellow", r: "red", o: "orange", b: "blue", g: "green" };
+
+test("cancel leaves the cube alone", async ({ page }, testInfo) => {
+  await page.goto("./");
+  await page.getByText("No moves needed").waitFor();
+  await page.getByRole("button", { name: "Enter colours" }).click();
+  await page.getByRole("button", { name: "red", exact: true }).click();
+  await paintSticker(page, "F", 0, 0, testInfo);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED);
+  await expect(page.getByTestId("paint-face")).toHaveCount(0);
+});
+
+test("paints a known cube on the 3D faces, then solves it", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  const target = faceletsToString(applyMoves(solvedBytes(), ["R", "U"]));
+  await page.goto("./");
+  await page.getByText("No moves needed").waitFor();
+  await page.getByRole("button", { name: "Enter colours" }).click();
+  for (const face of PAINT_FACES) {
+    await waitForFace(page, face);
+    const shot = testInfo.project.name === "mobile" ? (face === "F" ? "/opt/cursor/artifacts/paint-face-F-mobile.png" : "") : `/opt/cursor/artifacts/paint-face-${face}.png`;
+    if (shot) await page.screenshot({ path: shot });
+    if (face === "F") {
+      const canvasBox = await page.locator("canvas").boundingBox();
+      const nextBox = await page.getByRole("button", { name: "Next face" }).boundingBox();
+      const view = page.viewportSize();
+      expect(canvasBox && nextBox && view).toBeTruthy();
+      expect(nextBox!.y).toBeGreaterThanOrEqual((canvasBox!.y + canvasBox!.height) - 1);
+      expect(nextBox!.y + nextBox!.height).toBeLessThanOrEqual(view!.height + 1);
+      expect(nextBox!.height).toBeGreaterThanOrEqual(44);
+    }
+    for (let row = 0; row < 3; row += 1) {
+      for (let col = 0; col < 3; col += 1) {
+        const index = faceletIndex(face, row, col);
+        if (isCentre(index)) continue;
+        const name = NAMES[target[index] ?? ""] ?? "";
+        await page.getByRole("button", { name, exact: true }).click();
+        await paintSticker(page, face, row, col, testInfo);
+      }
+    }
+    if (face !== "D") await page.getByRole("button", { name: "Next face" }).click();
+  }
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(target, { timeout: 20_000 });
+  await expect(page.getByTestId("lesson-step")).toHaveText(/· \d+\/\d+/);
+  await page.getByTestId("solve-fast").click();
+  await expect(page.getByTestId("lesson-step")).toHaveText("Solved", { timeout: 30_000 });
+});
+
+test("keyboard paints a sticker, and a drag does not", async ({ page }, testInfo) => {
+  await page.goto("./");
+  await page.getByText("No moves needed").waitFor();
+  await page.getByRole("button", { name: "Enter colours" }).click();
+  await waitForFace(page, "F");
+  const canvas = page.locator("canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("The cube is not on screen.");
+  if (testInfo.project.name === "mobile") {
+    test.info().annotations.push({ type: "input", description: "Simulated touch drag, not a physical phone." });
+    const down = { clientX: box.x + box.width * 0.5, clientY: box.y + box.height * 0.45, pointerId: 7, pointerType: "touch", buttons: 1, isPrimary: true, bubbles: true, cancelable: true };
+    const up = { clientX: box.x + box.width * 0.5 + 96, clientY: box.y + box.height * 0.45 + 18, pointerId: 7, pointerType: "touch", buttons: 0, isPrimary: true, bubbles: true, cancelable: true };
+    await canvas.dispatchEvent("pointerdown", down);
+    await canvas.dispatchEvent("pointermove", { ...up, buttons: 1 });
+    await canvas.dispatchEvent("pointerup", up);
+  } else {
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.45);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.5 + 96, box.y + box.height * 0.45 + 18, { steps: 10 });
+    await page.mouse.up();
+  }
+  const shifted = await canvas.evaluate((el) => (el as HTMLCanvasElement & { __rubicPose?: () => { theta: number; phi: number } }).__rubicPose?.() ?? { theta: 0, phi: 0 });
+  const home = facePose("F");
+  const yaw = Math.atan2(Math.sin(shifted.theta - home.theta), Math.cos(shifted.theta - home.theta));
+  expect(Math.hypot(yaw, shifted.phi - home.phi)).toBeGreaterThan(0.12);
+  await page.getByRole("button", { name: "Next face" }).click();
+  await waitForFace(page, "R");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await waitForFace(page, "F");
+  await page.getByRole("button", { name: "red", exact: true }).click();
+  const sticker = page.getByRole("button", { name: "Front row 1 column 1, green" });
+  await sticker.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Front row 1 column 1, red" })).toHaveCount(1);
+  for (let step = 0; step < 5; step += 1) await page.getByRole("button", { name: "Next face" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("alert")).toContainText(/9 stickers/);
+  await expect(page.getByTestId("paint-face")).toHaveText(/Front · 1 of 6/);
+});
