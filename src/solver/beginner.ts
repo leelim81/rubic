@@ -18,6 +18,7 @@ import {
   type PieceSpot,
 } from "../cube/model";
 import { validateBytes } from "../cube/validate";
+import { labelStages, stripWaste } from "./optimize";
 import { fingerTricks } from "../teaching/fingers";
 
 export type StageId = "hold" | "cross" | "corners" | "middle" | "yellowCross" | "yellowEdges" | "yellowCorners" | "orientCorners";
@@ -49,11 +50,11 @@ export interface Solution {
 const STAGE_META: Record<Exclude<StageId, "hold">, { number: number; name: string }> = {
   cross: { number: 1, name: "White cross" },
   corners: { number: 2, name: "White corners" },
-  middle: { number: 3, name: "Second layer" },
+  middle: { number: 3, name: "Middle layer" },
   yellowCross: { number: 4, name: "Yellow cross" },
-  yellowEdges: { number: 5, name: "Match the cross" },
-  yellowCorners: { number: 6, name: "Place the corners" },
-  orientCorners: { number: 7, name: "Twist the corners" },
+  yellowEdges: { number: 5, name: "Yellow edges" },
+  yellowCorners: { number: 6, name: "Yellow corners" },
+  orientCorners: { number: 7, name: "Orient corners" },
 };
 
 const RIGHT_LAYER = ["U", "R", "U'", "R'", "U'", "F'", "U", "F"];
@@ -77,6 +78,19 @@ const FACE_OF_NORMAL: Record<string, Face> = {
 };
 
 export function solveBeginner(facelets: string): Solution {
+  const initial = stringToFacelets(facelets);
+  const verdict = validateBytes(initial, { searchRotations: false });
+  if (!verdict.ok) throw new Error(verdict.issues[0]?.message ?? "This colouring is not a solvable 3×3.");
+  if (matchesCenters(initial)) return pack([]);
+  const short = searchMoves(initial, matchesCenters, { maxDepth: 2 });
+  const done = (id: StageId, cube: Uint8Array) => stageGoalMet(cube, id);
+  if (short) return labelStages(initial, stripWaste(short, initial), done);
+  const raw = solveBeginnerRaw(facelets);
+  return labelStages(initial, stripWaste(raw.moves, initial), done);
+}
+
+/** The layer-by-layer plan before cancellation and cycle removal. */
+export function solveBeginnerRaw(facelets: string): Solution {
   const initial = stringToFacelets(facelets);
   const verdict = validateBytes(initial, { searchRotations: false });
   if (!verdict.ok) {

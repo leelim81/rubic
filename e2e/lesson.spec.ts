@@ -16,14 +16,15 @@ test.afterEach(async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test("options stay closed until opened, and face buttons work from the keyboard", async ({ page }, testInfo) => {
+test("options stay closed until opened, and the solution choice is inside", async ({ page }, testInfo) => {
   const options = page.locator("details.options-panel summary");
   await expect(options).toHaveText("Options");
   await expect(options).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByLabel("Turn speed")).toBeHidden();
+  await expect(page.getByLabel("Solution method")).toBeHidden();
   await expect(page.getByRole("button", { name: "Scramble" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Scan" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Top, front edge left U", exact: true })).toBeHidden();
+  await expect(page.getByRole("radio")).toHaveCount(0);
   if (testInfo.project.name === "desktop") {
     await options.scrollIntoViewIfNeeded();
     await page.screenshot({ path: "/tmp/rubic-disclosure-desktop.png" });
@@ -33,7 +34,8 @@ test("options stay closed until opened, and face buttons work from the keyboard"
   await page.keyboard.press("Enter");
   await expect(options).toHaveText("Hide options");
   await expect(options).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByRole("button", { name: "Top, front edge left U", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Solution method")).toBeVisible();
+  await expect(page.getByLabel("Solution method")).toHaveValue("beginner");
   await options.click();
   await expect(options).toHaveText("Options");
   await expect(options).toHaveAttribute("aria-expanded", "false");
@@ -43,7 +45,7 @@ test("scramble, next, back, and replay stay in step", async ({ page }, testInfo)
   await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Scramble" }).click();
   const step = page.getByTestId("lesson-step");
-  await expect(step).toHaveText(/Step 1 of|Half turn/, { timeout: 20_000 });
+  await expect(step).toHaveText(/· \d+\/\d+/, { timeout: 20_000 });
   const before = await step.textContent();
   await page.getByRole("button", { name: /^Next/ }).click();
   await expect(step).not.toHaveText(before ?? "");
@@ -58,7 +60,7 @@ test("scramble, next, back, and replay stay in step", async ({ page }, testInfo)
 test("reset returns to the solved empty state", async ({ page }) => {
   await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Scramble" }).click();
-  await expect(page.getByTestId("lesson-step")).toHaveText(/Step 1 of|Half turn/, { timeout: 20_000 });
+  await expect(page.getByTestId("lesson-step")).toHaveText(/· \d+\/\d+/, { timeout: 20_000 });
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(page.getByText("No moves needed")).toBeVisible();
 });

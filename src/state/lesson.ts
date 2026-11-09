@@ -238,20 +238,19 @@ export function progressLabel(lesson: Lesson): { stage: string; step: string } {
   const total = lesson.moves.length;
   if (!total) return { stage: "Solved", step: "No moves needed" };
   if (lesson.cursor >= total && !lesson.pending) return { stage: "Solved", step: "Solved" };
-  const stage = `Step ${Math.min(lesson.cursor + 1, total)} of ${total}`;
-  const next = lesson.moves[lesson.cursor];
-  const previous = lesson.cursor > 0 ? lesson.moves[lesson.cursor - 1] : undefined;
-  if (lesson.pending?.intent === "do" && isFaceHalf(next)) {
-    return { stage, step: `Half turn ${next}: 1 of 2. Do ${lesson.pending.move} again.` };
-  }
-  if (lesson.pending?.intent === "undo" && isFaceHalf(previous)) {
-    return { stage, step: `Taking back ${previous}: 1 of 2. Do ${lesson.pending.move} again.` };
-  }
-  if (isFaceHalf(next)) {
-    const face = next[0];
-    return { stage, step: `Half turn ${next}: quarter 1 of 2. ${face} twice, or ${face}' twice.` };
-  }
-  return { stage, step: `Step ${Math.min(lesson.cursor + 1, total)} of ${total} · ${next}` };
+  const chunkIndex = lesson.chunkOfMove[lesson.cursor] ?? 0;
+  const chunk = lesson.chunks[chunkIndex];
+  const stageName = chunk?.stageName || "Solve";
+  let first = chunkIndex;
+  while (first > 0 && lesson.chunks[first - 1]?.stageId === chunk?.stageId) first -= 1;
+  let last = chunkIndex;
+  while (last + 1 < lesson.chunks.length && lesson.chunks[last + 1]?.stageId === chunk?.stageId) last += 1;
+  let stageStart = 0;
+  for (let index = 0; index < first; index += 1) stageStart += lesson.chunks[index]?.moves.length ?? 0;
+  let stageLength = 0;
+  for (let index = first; index <= last; index += 1) stageLength += lesson.chunks[index]?.moves.length ?? 0;
+  const within = lesson.cursor - stageStart + 1;
+  return { stage: stageName, step: `${stageName} · ${within}/${stageLength}` };
 }
 
 export function applyUserMove(facelets: string, move: string): string {
