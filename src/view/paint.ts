@@ -1,4 +1,7 @@
-import { type Face, type Vec, faceOffset, SLOTS } from "../cube/model";
+import { type Face, type Vec, faceOffset, faceletsToString, solvedBytes, SLOTS } from "../cube/model";
+
+/** Unfilled sticker. Centres stay coloured so the hold is obvious. */
+export const BLANK = ".";
 
 /** The order a person turns a physical cube while copying colours. */
 export const PAINT_FACES: Face[] = ["F", "R", "B", "L", "U", "D"];
@@ -46,6 +49,51 @@ export function faceletIndex(face: Face, row: number, col: number): number {
 
 export function isCentre(index: number): boolean {
   return index % 9 === 4;
+}
+
+/** Solved centres, and a blank everywhere else. */
+export function blankPaint(): string {
+  const solved = faceletsToString(solvedBytes());
+  return [...solved].map((letter, index) => (isCentre(index) ? letter : BLANK)).join("");
+}
+
+export function blankCount(cells: string): number {
+  return [...cells].filter((letter) => letter === BLANK).length;
+}
+
+/** First paint face that still has an unfilled sticker. */
+export function firstBlankFace(cells: string): Face | null {
+  for (const face of PAINT_FACES) {
+    for (let row = 0; row < 3; row += 1) {
+      for (let col = 0; col < 3; col += 1) {
+        const index = faceletIndex(face, row, col);
+        if (!isCentre(index) && cells[index] === BLANK) return face;
+      }
+    }
+  }
+  return null;
+}
+
+/** How many of the 8 paintable stickers on this face have a colour. */
+export function filledOnFace(cells: string, face: Face): number {
+  let filled = 0;
+  for (let row = 0; row < 3; row += 1) {
+    for (let col = 0; col < 3; col += 1) {
+      const index = faceletIndex(face, row, col);
+      if (!isCentre(index) && cells[index] !== BLANK) filled += 1;
+    }
+  }
+  return filled;
+}
+
+export function blankMessage(count: number): string {
+  return count === 1 ? "1 sticker still blank" : `${count} stickers still blank`;
+}
+
+/** Blank stickers send you to the first unfinished face. Any other failure starts again at the front. */
+export function faceAfterFailedDone(cells: string): Face {
+  if (blankCount(cells) > 0) return firstBlankFace(cells) ?? "F";
+  return "F";
 }
 
 export function faceOfIndex(index: number): Face {

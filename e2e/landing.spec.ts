@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { faceletsToString, solvedBytes } from "../src/cube/model";
+import { blankPaint } from "../src/view/paint";
 
 const SOLVED = faceletsToString(solvedBytes());
 
@@ -28,9 +29,13 @@ test("an empty visit shows one button, and a saved cube comes back ready", async
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("button")).toHaveCount(1);
 
-  await page.getByRole("button", { name: "Enter colours" }).click();
-  for (let step = 0; step < 5; step += 1) await page.getByRole("button", { name: "Next face" }).click();
-  await page.getByRole("button", { name: "Done" }).click();
+  await page.evaluate((start) => {
+    const lesson = { start, moves: [], chunkOfMove: [], chunks: [], cursor: 0, history: [] };
+    localStorage.setItem("rubic-entered-v1", "1");
+    localStorage.setItem("rubic-lesson-v1", JSON.stringify(lesson));
+    sessionStorage.setItem("rubic-lesson-v1", JSON.stringify(lesson));
+  }, SOLVED);
+  await page.reload();
   await expect(page.getByText("No moves needed")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Edit colours" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Next/ })).toBeVisible();
@@ -54,6 +59,12 @@ test("an empty visit shows one button, and a saved cube comes back ready", async
   await page.reload();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(scrambled ?? "");
   await expect(page.getByRole("button", { name: "Edit colours" })).toBeVisible();
+  await page.getByRole("button", { name: "Edit colours" }).click();
+  await expect(page.getByTestId("paint-cells")).toHaveText(scrambled ?? "");
+  await page.getByRole("button", { name: "Clear all" }).click();
+  await expect(page.getByTestId("paint-cells")).toHaveText(blankPaint());
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(scrambled ?? "");
 
   await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "New cube" }).click();

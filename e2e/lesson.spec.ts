@@ -77,6 +77,7 @@ test("manual colours can reject an impossible cube", async ({ page }, testInfo) 
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("alert")).toContainText("each colour needs 9 stickers");
   await expect(page.getByTestId("paint-face")).toHaveText(/Front · 1 of 6/);
+  if (testInfo.project.name === "desktop") await page.screenshot({ path: "/opt/cursor/artifacts/paint-count-error.png" });
   await expect(page.getByRole("button", { name: "Front row 1 column 1, white" })).toHaveCount(1);
 });
 
