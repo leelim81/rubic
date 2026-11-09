@@ -8,20 +8,36 @@ const NAMES: Record<string, string> = { w: "white", y: "yellow", r: "red", o: "o
 
 test("cancel leaves the cube alone", async ({ page }, testInfo) => {
   await page.goto("./");
-  await page.getByText("No moves needed").waitFor();
   await page.getByRole("button", { name: "Enter colours" }).click();
   await page.getByRole("button", { name: "red", exact: true }).click();
   await paintSticker(page, "F", 0, 0, testInfo);
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED);
   await expect(page.getByTestId("paint-face")).toHaveCount(0);
+  await expect(page.getByRole("button")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Enter colours" })).toBeVisible();
+});
+
+test("a mistake on a later face returns to the front and keeps the paint", async ({ page }, testInfo) => {
+  await page.goto("./");
+  await page.getByRole("button", { name: "Enter colours" }).click();
+  await page.getByRole("button", { name: "Next face" }).click();
+  await waitForFace(page, "R");
+  await page.getByRole("button", { name: "white", exact: true }).click();
+  await paintSticker(page, "R", 0, 0, testInfo);
+  for (let step = 0; step < 4; step += 1) await page.getByRole("button", { name: "Next face" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("alert")).toContainText("each colour needs 9 stickers");
+  await expect(page.getByTestId("paint-face")).toHaveText(/Front · 1 of 6/);
+  await page.getByRole("button", { name: "Next face" }).click();
+  await waitForFace(page, "R");
+  await expect(page.getByRole("button", { name: "Right row 1 column 1, white" })).toHaveCount(1);
 });
 
 test("paints a known cube on the 3D faces, then solves it", async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   const target = faceletsToString(applyMoves(solvedBytes(), ["R", "U"]));
   await page.goto("./");
-  await page.getByText("No moves needed").waitFor();
   await page.getByRole("button", { name: "Enter colours" }).click();
   for (const face of PAINT_FACES) {
     await waitForFace(page, face);
@@ -55,8 +71,24 @@ test("paints a known cube on the 3D faces, then solves it", async ({ page }, tes
 });
 
 test("keyboard paints a sticker, and a drag does not", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    const mark = () => { (window as unknown as { __errorTones: number }).__errorTones = ((window as unknown as { __errorTones?: number }).__errorTones ?? 0) + 1; };
+    class Fake {
+      currentTime = 0;
+      destination = {};
+      resume() { return Promise.resolve(); }
+      close() { return Promise.resolve(); }
+      createOscillator() {
+        return { frequency: { value: 0 }, type: "sine", connect() {}, start: mark, stop() {} };
+      }
+      createGain() {
+        return { gain: { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
+      }
+    }
+    (window as unknown as { AudioContext: unknown }).AudioContext = Fake;
+    (window as unknown as { webkitAudioContext: unknown }).webkitAudioContext = Fake;
+  });
   await page.goto("./");
-  await page.getByText("No moves needed").waitFor();
   await page.getByRole("button", { name: "Enter colours" }).click();
   await waitForFace(page, "F");
   const canvas = page.locator("canvas");
@@ -90,6 +122,13 @@ test("keyboard paints a sticker, and a drag does not", async ({ page }, testInfo
   await expect(page.getByRole("button", { name: "Front row 1 column 1, red" })).toHaveCount(1);
   for (let step = 0; step < 5; step += 1) await page.getByRole("button", { name: "Next face" }).click();
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByRole("alert")).toContainText(/9 stickers/);
+  await expect(page.getByRole("alert")).toContainText("each colour needs 9 stickers");
   await expect(page.getByTestId("paint-face")).toHaveText(/Front · 1 of 6/);
+  await expect(page.getByRole("button", { name: "Front row 1 column 1, red" })).toHaveCount(1);
+  expect(await page.evaluate(() => (window as unknown as { __errorTones?: number }).__errorTones ?? 0)).toBeGreaterThan(0);
+  const shot = testInfo.project.name === "desktop" ? "/opt/cursor/artifacts/paint-error-desktop.png" : "/opt/cursor/artifacts/paint-error-mobile.png";
+  await page.screenshot({ path: shot });
+  await page.getByRole("button", { name: "Clear all" }).click();
+  await expect(page.getByRole("button", { name: "Front row 1 column 1, green" })).toHaveCount(1);
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });

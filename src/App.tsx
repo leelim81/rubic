@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { COLORS, type ColorName, applyMoves, centerColor, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
-import { PAINT_FACES, PAINT_GUIDE, facePose, faceToInspect, faceletIndex, isCentre } from "./view/paint";
+import { PAINT_FACES, PAINT_GUIDE, facePose, faceletIndex, isCentre, paintErrorMessage } from "./view/paint";
+import { playPaintError } from "./view/paintSound";
 import { validateFaceletString } from "./cube/validate";
 import { solveInWorker, type SolveMethod } from "./solveClient";
 import {
@@ -26,8 +27,10 @@ import { Disclosure } from "./view/Disclosure";
 
 const SOLVED = faceletsToString(solvedBytes());
 const STORAGE = "rubic-lesson-v1";
+const ENTERED = "rubic-entered-v1";
 
 export function App() {
+  const [entered, setEntered] = useState(() => readEntered());
   const [lesson, setLesson] = useState<Lesson>(() => loadLesson());
   const [letters, setLetters] = useState(true);
   const [mode, setMode] = useState<"cube" | "paint">("cube");
@@ -35,6 +38,7 @@ export function App() {
   const [paintColor, setPaintColor] = useState<ColorName>("white");
   const [paintStep, setPaintStep] = useState(0);
   const [paintError, setPaintError] = useState<string | null>(null);
+  const [shaking, setShaking] = useState(false);
   const [checkpoint, setCheckpoint] = useState<Lesson | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +48,7 @@ export function App() {
   const flight = useRef(false);
   const solvingRef = useRef(false);
   const runToken = useRef(0);
+  const shakeTimer = useRef(0);
   const lessonRef = useRef(lesson);
   const [turnMs, setTurnMs] = useState(750);
   const [method, setMethod] = useState<SolveMethod>("beginner");
@@ -55,8 +60,16 @@ export function App() {
   const onGesture = useCallback((message: string | null) => setGestureNote(message), []);
 
   useEffect(() => {
-    sessionStorage.setItem(STORAGE, JSON.stringify({ start: lesson.start, moves: lesson.moves, chunkOfMove: lesson.chunkOfMove, chunks: lesson.chunks, cursor: lesson.cursor, history: lesson.history }));
-  }, [lesson]);
+    const payload = JSON.stringify({ start: lesson.start, moves: lesson.moves, chunkOfMove: lesson.chunkOfMove, chunks: lesson.chunks, cursor: lesson.cursor, history: lesson.history });
+    sessionStorage.setItem(STORAGE, payload);
+    if (entered) {
+      localStorage.setItem(ENTERED, "1");
+      localStorage.setItem(STORAGE, payload);
+    } else {
+      localStorage.removeItem(ENTERED);
+      localStorage.removeItem(STORAGE);
+    }
+  }, [lesson, entered]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -94,6 +107,7 @@ export function App() {
     setError(null);
     try {
       const solution = await solveInWorker(start, chosen);
+      setEntered(true);
       setLesson((current) => withSolution({ ...current, history: [] }, start, solution, notice));
       setCheckpoint(null);
       setMode("cube");
@@ -245,7 +259,7 @@ export function App() {
   }
 
   function startPaint() {
-    setPaintCells(SOLVED);
+    setPaintCells(entered ? facelets : SOLVED);
     setPaintColor("white");
     setPaintStep(0);
     setPaintError(null);
@@ -259,6 +273,21 @@ export function App() {
     cubeRef.current?.resetView();
   }
 
+  function clearPaint() {
+    setPaintCells(SOLVED);
+    setPaintError(null);
+    setPaintStep(0);
+  }
+
+  function newCube() {
+    setEntered(false);
+    setCheckpoint(null);
+    setLesson(emptyLesson(SOLVED));
+    setError(null);
+    setMode("cube");
+    cubeRef.current?.resetView();
+  }
+
   function paintSticker(index: number) {
     const face = PAINT_FACES[paintStep];
     if (!face || isCentre(index) || Math.floor(index / 9) !== "URFDLB".indexOf(face)) return;
@@ -269,14 +298,23 @@ export function App() {
   function finishPaint() {
     const verdict = validateFaceletString(paintCells);
     if (!verdict.ok) {
-      setPaintError(verdict.issues.map((issue) => issue.message).join(" "));
-      const face = faceToInspect(paintCells, verdict.issues);
-      if (face) setPaintStep(PAINT_FACES.indexOf(face));
+      playPaintError();
+      setPaintError(paintErrorMessage(verdict.issues));
+      setPaintStep(0);
+      const pose = facePose("F");
+      cubeRef.current?.setPaintFace("F");
+      void cubeRef.current?.lookAt(pose.theta, pose.phi, 680);
+      if (!reduced) {
+        setShaking(true);
+        window.clearTimeout(shakeTimer.current);
+        shakeTimer.current = window.setTimeout(() => setShaking(false), 480);
+      }
       return;
     }
-    const entered = paintCells;
+    const cells = paintCells;
+    setEntered(true);
     leavePaint();
-    void load(entered, "Solution started from the colours you entered.");
+    void load(cells, "Solution started from the colours you entered.");
   }
 
   useEffect(() => {
@@ -294,20 +332,24 @@ export function App() {
     <div className="app">
       <header className="top">
         <p className="mark">Rubic</p>
-        <nav aria-label="Primary">
-          <button type="button" className="text-button" onClick={startPaint}>Enter colours</button>
-        </nav>
+        {entered && mode === "cube" ? (
+          <nav aria-label="Primary">
+            <button type="button" className="text-button" onClick={startPaint}>Edit colours</button>
+          </nav>
+        ) : null}
       </header>
       <main>
         <section className="stage-column" aria-labelledby="cube-title">
-          {mode === "paint" ? <PaintStatus step={paintStep} error={paintError} /> : (
+          {mode === "paint" ? <PaintStatus step={paintStep} error={paintError} /> : entered ? (
             <div className="status" aria-live="polite">
               <p id="cube-title" className="status-title" data-testid="lesson-step">{labels.step}</p>
               {moveLine ? <p className="move-line" data-testid="move-line">{moveLine}</p> : null}
             </div>
+          ) : (
+            <p id="cube-title" className="empty-prompt" data-testid="empty-prompt">Enter your cube's colours to get step-by-step help.</p>
           )}
           <div className="hero">
-            <div className="cube-frame">
+            <div className={shaking ? "cube-frame is-shaking" : "cube-frame"}>
               <CubeView
                 ref={cubeRef}
                 facelets={mode === "paint" ? paintCells : facelets}
@@ -316,6 +358,7 @@ export function App() {
                 label={mode === "paint" ? paintLabel(paintStep) : cubeLabel(facelets, finished ? undefined : nextMove)}
                 onPaint={paintSticker}
                 paintFace={mode === "paint" ? PAINT_FACES[paintStep] ?? null : null}
+                idle={mode === "cube" && !entered}
                 onGesture={onGesture}
                 turnMs={turnMs}
               />
@@ -332,23 +375,28 @@ export function App() {
               onBack={() => { setPaintError(null); setPaintStep((value) => Math.max(0, value - 1)); }}
               onNext={() => { setPaintError(null); setPaintStep((value) => Math.min(PAINT_FACES.length - 1, value + 1)); }}
               onDone={finishPaint}
+              onClear={clearPaint}
               onCancel={() => leavePaint()}
             />
-          ) : (
+          ) : entered ? (
           <div className="controls">
             <button type="button" className="back" onClick={() => void run(() => go(-1))} disabled={running || lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0 && !lesson.pending)}>Back</button>
             <button type="button" className="primary" onClick={() => void run(() => go(1))} disabled={running || lesson.busy || loading || (!nextMove && lesson.pending?.intent !== "do") || lesson.pending?.intent === "undo"}>Next{lesson.pending?.intent === "do" ? ` · ${lesson.pending.move}` : nextMove ? ` · ${nextMove}` : ""}</button>
             <button type="button" className="fast" data-testid="solve-fast" onClick={() => void solveFast()} disabled={running || lesson.busy || loading || !advanceLesson(lesson)}>Solve 3×</button>
             <button type="button" className={running ? "stop" : "stop is-quiet"} data-testid="stop-solve" onClick={stopSolve} disabled={!running} aria-hidden={!running} tabIndex={running ? 0 : -1}>Stop</button>
-            <button type="button" className={checkpoint ? "restore" : "restore is-quiet"} data-testid="restore-solve" onClick={restoreSolve} disabled={!checkpoint} aria-hidden={!checkpoint} tabIndex={checkpoint ? 0 : -1} aria-label="Restore before solve"><span className="restore-long">Restore before solve</span><span className="restore-short">Restore</span></button>
+            <button type="button" className={checkpoint ? "restore" : "restore is-quiet"} data-testid="restore-solve" onClick={restoreSolve} disabled={!checkpoint} aria-hidden={!checkpoint} tabIndex={checkpoint ? 0 : -1} aria-label="Restore before solve"><span className="restore-long">Restore before solve</span><span className="restore-short">Restore</span>            </button>
           </div>
+          ) : (
+            <div className="enter-hero">
+              <button type="button" className="primary" onClick={startPaint}>Enter colours</button>
+            </div>
           )}
           {gestureNote ? <p className="notice" role="status">{gestureNote}</p> : null}
           {lesson.notice ? <p className="notice" role="status">{lesson.notice}</p> : null}
           {error ? <p className="error" role="alert">{error}</p> : null}
           {loading ? <p className="quiet" role="status">Preparing the solution… you can keep looking at the cube.</p> : null}
-          {mode !== "paint" && reduced ? <p className="quiet">Reduced motion is on. Moves jump to the next state, and the move letter is still announced above.</p> : null}
-          {mode !== "paint" && <Disclosure className="options-panel" show="Options" hide="Hide options" controls="options-panel">
+          {entered && mode !== "paint" && reduced ? <p className="quiet">Reduced motion is on. Moves jump to the next state, and the move letter is still announced above.</p> : null}
+          {entered && mode !== "paint" && <Disclosure className="options-panel" show="Options" hide="Hide options" controls="options-panel">
             <label className="speed-label">
               Solution
               <select aria-label="Solution method" value={method} onChange={(event) => {
@@ -371,6 +419,7 @@ export function App() {
             <div className="row secondary-actions">
               <button type="button" onClick={() => void load(faceletsToString(applyScramble()), null)} disabled={running || lesson.busy || loading}>Scramble</button>
               <button type="button" onClick={() => { setCheckpoint(null); setLesson(emptyLesson(SOLVED)); setError(null); }} disabled={running || lesson.busy}>Reset</button>
+              <button type="button" onClick={newCube} disabled={running || lesson.busy || loading}>New cube</button>
               <button type="button" onClick={() => void run(() => replayMove())} disabled={running || lesson.busy || loading || (!nextMove && lesson.cursor === 0)}>Replay move</button>
               <button type="button" onClick={() => cubeRef.current?.resetView()}>Reset view</button>
             </div>
@@ -402,7 +451,7 @@ function PaintStatus({ step, error }: { step: number; error: string | null }) {
 
 const STICKER_NAME: Record<string, string> = { w: "white", y: "yellow", r: "red", o: "orange", b: "blue", g: "green" };
 
-function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, onDone, onCancel }: {
+function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, onDone, onClear, onCancel }: {
   step: number;
   cells: string;
   color: ColorName;
@@ -411,6 +460,7 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
   onBack: () => void;
   onNext: () => void;
   onDone: () => void;
+  onClear: () => void;
   onCancel: () => void;
 }) {
   const last = step === PAINT_FACES.length - 1;
@@ -446,6 +496,7 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
           : <button type="button" className="primary" onClick={onNext}>Next face</button>}
         <button type="button" className="ghost" onClick={onCancel}>Cancel</button>
       </div>
+      <button type="button" className="paint-clear" onClick={onClear}>Clear all</button>
     </div>
   );
 }
@@ -476,16 +527,25 @@ function applyScramble(): Uint8Array {
 }
 
 function holdLine(state: ReturnType<typeof stringToFacelets>): string {
-  return `Hold ${centerColor(state, "U")} on top, ${centerColor(state, "D")} on the bottom, and ${centerColor(state, "F")} facing you. Right is ${centerColor(state, "R")}. Moves follow this hold, not the camera.`;
+  return `Hold the ${centerColor(state, "U")} centre on top, the ${centerColor(state, "D")} centre on the bottom, and the ${centerColor(state, "F")} centre facing you. Right is ${centerColor(state, "R")}.`;
 }
 
 function cubeLabel(facelets: string, move: string | undefined): string {
   return move ? `Cube. Next move ${move}. ${holdLine(stringToFacelets(facelets))}` : `Cube. ${holdLine(stringToFacelets(facelets))}`;
 }
 
-function loadLesson(): Lesson {
+function readEntered(): boolean {
   try {
-    const raw = sessionStorage.getItem(STORAGE);
+    return localStorage.getItem(ENTERED) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function loadLesson(): Lesson {
+  if (!readEntered()) return emptyLesson(SOLVED);
+  try {
+    const raw = sessionStorage.getItem(STORAGE) || localStorage.getItem(STORAGE);
     if (!raw) return emptyLesson(SOLVED);
     const saved = JSON.parse(raw) as Lesson;
     if (!saved.start || !Array.isArray(saved.moves)) return emptyLesson(SOLVED);

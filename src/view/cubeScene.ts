@@ -58,6 +58,8 @@ export interface CubeSceneOptions {
   onGesture?: (message: string | null) => void;
   onPaint?: (index: number) => void;
   paintFace?: Face | null;
+  /** Slow spin used on the empty landing, before a cube has been entered. */
+  idle?: boolean;
   turnMs?: number;
 }
 
@@ -82,6 +84,7 @@ export class CubeScene {
   private facelets = "";
   private disposed = false;
   private animating = false;
+  private idleStamp = 0;
   private options: CubeSceneOptions;
   private resizeObserver: ResizeObserver;
   private textures = new Map<string, THREE.CanvasTexture>();
@@ -362,6 +365,13 @@ export class CubeScene {
 
   private loop = () => {
     if (this.disposed) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - (this.idleStamp || now)) / 1000);
+    this.idleStamp = now;
+    if (this.options.idle && !this.options.reducedMotion && !this.dragging && !this.animating && !this.options.paintFace) {
+      this.theta += dt * 0.18;
+      this.updateCamera();
+    }
     this.renderer.render(this.scene, this.camera);
     this.frame = requestAnimationFrame(this.loop);
   };
