@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { type ColorName, type Face, FACES, faceOffset, stringToFacelets } from "../cube/model";
+import { isCentre } from "./paint";
 import { SLOTS } from "../cube/model";
 import { cameraDistance, HOME_PHI, HOME_THETA, orbitBy, viewIsShifted } from "./camera";
 
@@ -55,6 +56,8 @@ export interface CubeSceneOptions {
   onTurn?: (move: string) => void;
   onViewShift?: (shifted: boolean) => void;
   onGesture?: (message: string | null) => void;
+  onPaint?: (index: number) => void;
+  paintFace?: Face | null;
   turnMs?: number;
 }
 
@@ -70,6 +73,8 @@ export class CubeScene {
   private radius = 11;
   private dragging = false;
   private pointer = { x: 0, y: 0 };
+  private down = { x: 0, y: 0 };
+  private viewToken = 0;
   private highlight = new Set<number>();
   private activePivot: THREE.Group | null = null;
   private activeAxis: "x" | "y" | "z" | null = null;
@@ -99,8 +104,13 @@ export class CubeScene {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas.parentElement ?? canvas);
     this.resize();
-    const exposed = this.canvas as HTMLCanvasElement & { __rubicSample?: () => unknown };
+    const exposed = this.canvas as HTMLCanvasElement & {
+      __rubicSample?: () => unknown;
+      __rubicPose?: () => { theta: number; phi: number };
+    };
     exposed.__rubicSample = () => this.sampleCubies();
+    exposed.__rubicPose = () => ({ theta: this.theta, phi: this.phi });
+    (exposed as HTMLCanvasElement & { __rubicReset?: () => void }).__rubicReset = () => this.resetView();
     this.canvas.addEventListener("pointerdown", this.onDown, { passive: false });
     this.canvas.addEventListener("pointermove", this.onMove, { passive: false });
     this.canvas.addEventListener("pointerup", this.onUp);
@@ -230,9 +240,12 @@ export class CubeScene {
       sticker.index = slot.index;
       const name = (["white", "yellow", "red", "orange", "blue", "green"] as const)[colors[slot.index]!]!;
       const highlighted = this.highlight.has(slot.index);
+      const painting = this.options.paintFace;
+      const onCurrent = !painting || slot.face === painting;
       sticker.material.color.set(STICKER[name]);
+      if (!onCurrent) sticker.material.color.multiplyScalar(0.34);
       sticker.material.emissive.set(STICKER[name]);
-      sticker.material.emissiveIntensity = highlighted ? 0.55 : 0.22;
+      sticker.material.emissiveIntensity = highlighted ? 0.55 : onCurrent ? 0.22 : 0.04;
       sticker.material.map = this.options.letters || highlighted ? this.texture(name, highlighted) : null;
       sticker.material.needsUpdate = true;
     }
@@ -353,9 +366,52 @@ export class CubeScene {
     this.frame = requestAnimationFrame(this.loop);
   };
 
+  setPaintFace(face: Face | null) {
+    this.options = { ...this.options, paintFace: face };
+    if (this.facelets) this.paint(this.facelets);
+  }
+
+  /** Smoothly turn the camera so a face sits toward the viewer, slightly angled. */
+  lookAt(theta: number, phi: number, duration = 700): Promise<void> {
+    const token = ++this.viewToken;
+    const fromTheta = this.theta;
+    const fromPhi = this.phi;
+    let deltaTheta = theta - fromTheta;
+    while (deltaTheta > Math.PI) deltaTheta -= Math.PI * 2;
+    while (deltaTheta < -Math.PI) deltaTheta += Math.PI * 2;
+    const deltaPhi = phi - fromPhi;
+    const apply = (amount: number) => {
+      this.theta = fromTheta + deltaTheta * amount;
+      this.phi = fromPhi + deltaPhi * amount;
+      this.updateCamera();
+      this.renderer.render(this.scene, this.camera);
+    };
+    if (this.options.reducedMotion || duration < 20) {
+      apply(1);
+      return Promise.resolve();
+    }
+    const start = performance.now();
+    return new Promise((resolve) => {
+      const step = (now: number) => {
+        if (token !== this.viewToken || this.disposed) {
+          resolve();
+          return;
+        }
+        const t = Math.min(1, (now - start) / duration);
+        const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+        apply(eased);
+        if (t < 1) requestAnimationFrame(step);
+        else resolve();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
   private onDown = (event: PointerEvent) => {
     if (this.animating || this.options.gesture === "off") return;
+    this.viewToken += 1;
     this.dragging = true;
+    this.down = { x: event.clientX, y: event.clientY };
     this.pointer = { x: event.clientX, y: event.clientY };
     try {
       this.canvas.setPointerCapture(event.pointerId);
@@ -380,8 +436,30 @@ export class CubeScene {
     event.preventDefault();
   };
 
-  private onUp = () => {
+  private onUp = (event: PointerEvent) => {
+    if (!this.dragging) return;
+    const dx = event.clientX - this.down.x;
+    const dy = event.clientY - this.down.y;
     this.dragging = false;
+    if (!this.options.paintFace || dx * dx + dy * dy > 10 * 10) return;
+    const index = this.pickIndex(event.clientX, event.clientY);
+    if (index === null || isCentre(index)) return;
+    const faceIndex = "URFDLB".indexOf(this.options.paintFace);
+    if (Math.floor(index / 9) !== faceIndex) return;
+    this.options.onPaint?.(index);
+  };
+
+  private pickIndex(clientX: number, clientY: number): number | null {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(x, y), this.camera);
+    const hits = ray.intersectObjects(this.stickers.map((sticker) => sticker.mesh), false);
+    const hit = hits[0];
+    if (!hit) return null;
+    const sticker = this.stickers.find((item) => item.mesh === hit.object);
+    return sticker && sticker.index >= 0 ? sticker.index : null;
   };
 
   private onCancel = () => {

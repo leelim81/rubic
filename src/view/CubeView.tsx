@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import type { Face } from "../cube/model";
 import { CubeScene, type CubeGesture } from "./cubeScene";
 
 export interface CubeHandle {
@@ -6,6 +7,8 @@ export interface CubeHandle {
   show: (facelets: string) => void;
   cancel: () => void;
   resetView: () => void;
+  setPaintFace: (face: Face | null) => void;
+  lookAt: (theta: number, phi: number, durationMs?: number) => Promise<void>;
 }
 
 interface Props {
@@ -17,11 +20,13 @@ interface Props {
   onTurn?: (move: string) => void;
   onViewShift?: (shifted: boolean) => void;
   onGesture?: (message: string | null) => void;
+  onPaint?: (index: number) => void;
+  paintFace?: Face | null;
   turnMs?: number;
 }
 
 export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
-  { facelets, highlight = [], letters, gesture, label, onTurn, onViewShift, onGesture, turnMs = 750 },
+  { facelets, highlight = [], letters, gesture, label, onTurn, onViewShift, onGesture, onPaint, paintFace = null, turnMs = 750 },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -44,8 +49,8 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   }, []);
 
   useEffect(() => {
-    sceneRef.current?.setOptions({ letters, gesture, reducedMotion: reduced, onTurn, onViewShift, onGesture, turnMs });
-  }, [letters, gesture, reduced, onTurn, onViewShift, onGesture, turnMs]);
+    sceneRef.current?.setOptions({ letters, gesture, reducedMotion: reduced, onTurn, onViewShift, onGesture, onPaint, paintFace, turnMs });
+  }, [letters, gesture, reduced, onTurn, onViewShift, onGesture, onPaint, paintFace, turnMs]);
 
   useEffect(() => {
     sceneRef.current?.setFacelets(facelets);
@@ -64,6 +69,8 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
     show: (next: string) => sceneRef.current?.setFacelets(next),
     cancel: () => sceneRef.current?.cancelAnimation(),
     resetView: () => sceneRef.current?.resetView(),
+    setPaintFace: (face: Face | null) => sceneRef.current?.setPaintFace(face),
+    lookAt: (theta: number, phi: number, durationMs?: number) => sceneRef.current?.lookAt(theta, phi, durationMs) ?? Promise.resolve(),
   }));
 
   return (
