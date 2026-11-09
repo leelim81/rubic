@@ -253,6 +253,14 @@ export function progressLabel(lesson: Lesson): { stage: string; step: string } {
   return { stage: stageName, step: `${stageName} · ${within}/${stageLength}` };
 }
 
+/** The line shown while a solution still has moves left. */
+export function solvingHeadline(method: "beginner" | "expert", stageStep: string, index: number, total: number): string {
+  const name = method === "beginner" ? "Beginner" : "Expert";
+  const move = `Move ${index} of ${total}`;
+  if (method === "beginner") return `${name} · ${stageStep} · ${move}`;
+  return `${name} · ${move}`;
+}
+
 export function applyUserMove(facelets: string, move: string): string {
   return faceletsToString(applyMoves(stringToFacelets(facelets), [move]));
 }

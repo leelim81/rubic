@@ -4,6 +4,10 @@ import { emptyLesson, withSolution } from "../src/state/lesson";
 import { solveBeginner } from "../src/solver/beginner";
 import { markReady } from "./ready";
 
+async function useBeginner(page: Page) {
+  await page.addInitScript(() => localStorage.setItem("rubic-method-v1", "beginner"));
+}
+
 const SOLVED = faceletsToString(solvedBytes());
 const CASES = [["U"], ["R2"], ["F", "U"], ["L'", "D"], ["B", "R2"]];
 
@@ -11,6 +15,7 @@ test("next follows several beginner solutions to solved", async ({ page }) => {
   test.setTimeout(180_000);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await markReady(page);
+  await useBeginner(page);
   await page.goto("./");
   await page.getByText("No moves needed").waitFor();
   for (const scramble of CASES) {
@@ -33,6 +38,7 @@ test("next follows several beginner solutions to solved", async ({ page }) => {
 test("solve 3× uses the beginner plan and restore returns that cube", async ({ page }) => {
   test.setTimeout(180_000);
   await markReady(page);
+  await useBeginner(page);
   await page.goto("./");
   await page.getByText("No moves needed").waitFor();
   await page.locator("details.options-panel summary").click();

@@ -2,13 +2,13 @@ import type { Solution } from "./solver/beginner";
 import { solveBeginner } from "./solver/beginner";
 import { solveCube } from "./solver/twoPhase";
 
-export type SolveMethod = "beginner" | "short";
+export type SolveMethod = "beginner" | "expert";
 
 function solveNow(facelets: string, method: SolveMethod): Solution {
-  return method === "short" ? solveCube(facelets) : solveBeginner(facelets);
+  return method === "expert" ? solveCube(facelets) : solveBeginner(facelets);
 }
 
-export function solveInWorker(facelets: string, method: SolveMethod = "beginner"): Promise<Solution> {
+export function solveInWorker(facelets: string, method: SolveMethod = "expert"): Promise<Solution> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
     try {

@@ -17,6 +17,7 @@ import {
   endAnimation,
   invertMove,
   progressLabel,
+  solvingHeadline,
   stepBack,
   stepForward,
   withSolution,
@@ -28,6 +29,7 @@ import { Disclosure } from "./view/Disclosure";
 const SOLVED = faceletsToString(solvedBytes());
 const STORAGE = "rubic-lesson-v1";
 const ENTERED = "rubic-entered-v1";
+const METHOD_KEY = "rubic-method-v1";
 
 export function App() {
   const [entered, setEntered] = useState(() => readEntered());
@@ -51,7 +53,7 @@ export function App() {
   const shakeTimer = useRef(0);
   const lessonRef = useRef(lesson);
   const [turnMs, setTurnMs] = useState(750);
-  const [method, setMethod] = useState<SolveMethod>("beginner");
+  const [method, setMethod] = useState<SolveMethod>(readMethod);
   lessonRef.current = lesson;
   const facelets = currentFacelets(lesson);
   const nextMove = lesson.moves[lesson.cursor];
@@ -70,6 +72,14 @@ export function App() {
       localStorage.removeItem(STORAGE);
     }
   }, [lesson, entered]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(METHOD_KEY, method);
+    } catch {
+      // Private mode can block storage. The choice still applies for this visit.
+    }
+  }, [method]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -334,7 +344,12 @@ export function App() {
   }, [mode, paintStep]);
 
   const finished = !nextMove && !lesson.pending;
-  const moveLine = finished || !lesson.moves.length ? "" : `Move ${Math.min(lesson.cursor + 1, lesson.moves.length)} of ${lesson.moves.length}${nextMove ? ` · ${plainMove(nextMove)}` : ""}`;
+  const solving = !finished && lesson.moves.length > 0;
+  const modeName = method === "beginner" ? "Beginner" : "Expert";
+  const headline = solving
+    ? solvingHeadline(method, labels.step, Math.min(lesson.cursor + 1, lesson.moves.length), lesson.moves.length)
+    : labels.step;
+  const moveLine = solving && nextMove ? plainMove(nextMove) : "";
 
   return (
     <div className="app">
@@ -350,7 +365,7 @@ export function App() {
         <section className="stage-column" aria-labelledby="cube-title">
           {mode === "paint" ? <PaintStatus step={paintStep} cells={paintCells} error={paintError} /> : entered ? (
             <div className="status" aria-live="polite">
-              <p id="cube-title" className="status-title" data-testid="lesson-step">{labels.step}</p>
+              <p id="cube-title" className="status-title" data-testid="lesson-step">{solving ? <><span className="mode-chip">{modeName}</span>{" · "}{headline.slice(modeName.length + 3)}</> : headline}</p>
               {moveLine ? <p className="move-line" data-testid="move-line">{moveLine}</p> : null}
             </div>
           ) : (
@@ -409,12 +424,12 @@ export function App() {
             <label className="speed-label">
               Solution
               <select aria-label="Solution method" value={method} onChange={(event) => {
-                const chosen = event.target.value === "short" ? "short" : "beginner";
+                const chosen = event.target.value === "beginner" ? "beginner" : "expert";
                 setMethod(chosen);
                 void load(facelets, null, chosen);
               }}>
+                <option value="expert">Expert</option>
                 <option value="beginner">Beginner</option>
-                <option value="short">Shortest</option>
               </select>
             </label>
             <label className="speed-label">
@@ -438,7 +453,7 @@ export function App() {
             </label>
             <p className="quiet">{holdLine(stringToFacelets(facelets))}</p>
             <p className="quiet">R means the right face, not red. A letter alone is clockwise as you look at that face. 2 is a half turn. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the cube as it was when that run started.</p>
-            <p className="quiet">Ordinary Western 3×3: white opposite yellow, red opposite orange, blue opposite green. Colours stay in this browser. The solution is a two-phase search, not a claim of the shortest sequence.</p>
+            <p className="quiet">Ordinary Western 3×3: white opposite yellow, red opposite orange, blue opposite green. Colours stay in this browser. Expert is a fast two-phase search. Beginner is the layer-by-layer lesson.</p>
           </Disclosure>}
         </section>
       </main>
@@ -542,6 +557,14 @@ function holdLine(state: ReturnType<typeof stringToFacelets>): string {
 
 function cubeLabel(facelets: string, move: string | undefined): string {
   return move ? `Cube. Next move ${move}. ${holdLine(stringToFacelets(facelets))}` : `Cube. ${holdLine(stringToFacelets(facelets))}`;
+}
+
+function readMethod(): SolveMethod {
+  try {
+    return localStorage.getItem(METHOD_KEY) === "beginner" ? "beginner" : "expert";
+  } catch {
+    return "expert";
+  }
 }
 
 function readEntered(): boolean {

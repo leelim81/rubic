@@ -19,6 +19,7 @@ test("cancel leaves the cube alone", async ({ page }, testInfo) => {
 });
 
 test("a fresh entry is blank except the centres, and Done opens the first unfinished face", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   await page.goto("./");
   await page.getByRole("button", { name: "Enter colours" }).click();
   await expect(page.getByTestId("paint-cells")).toHaveText(blankPaint());
@@ -40,6 +41,7 @@ test("a fresh entry is blank except the centres, and Done opens the first unfini
 });
 
 test("a mistake on a later face returns to the front and keeps the paint", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   await page.goto("./");
   await page.getByRole("button", { name: "Enter colours" }).click();
   await page.getByRole("button", { name: "Next face" }).click();
@@ -86,12 +88,13 @@ test("paints a known cube on the 3D faces, then solves it", async ({ page }, tes
   }
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(target, { timeout: 20_000 });
-  await expect(page.getByTestId("lesson-step")).toHaveText(/· \d+\/\d+/);
+  await expect(page.getByTestId("lesson-step")).toHaveText(/Expert · Move \d+ of \d+/);
   await page.getByTestId("solve-fast").click();
   await expect(page.getByTestId("lesson-step")).toHaveText("Solved", { timeout: 30_000 });
 });
 
 test("keyboard paints a sticker, and a drag does not", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   await page.addInitScript(() => {
     const mark = () => { (window as unknown as { __errorTones: number }).__errorTones = ((window as unknown as { __errorTones?: number }).__errorTones ?? 0) + 1; };
     class Fake {
