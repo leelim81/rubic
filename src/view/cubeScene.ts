@@ -195,13 +195,13 @@ export class CubeScene {
           const group = new THREE.Group();
           group.position.set(x, y, z);
           const body = new THREE.Mesh(
-            new THREE.BoxGeometry(0.94, 0.94, 0.94),
-            new THREE.MeshStandardMaterial({ color: "#2a261f", roughness: 0.62, metalness: 0.04 }),
+            new THREE.BoxGeometry(0.92, 0.92, 0.92),
+            new THREE.MeshStandardMaterial({ color: "#07070b", roughness: 0.38, metalness: 0.18 }),
           );
           group.add(body);
           const cubie: Cubie = { mesh: group, home: new THREE.Vector3(x, y, z), stickers: [] };
           for (const normal of normalsFor(x, y, z)) {
-            const material = new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false });
+            const material = new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false, alphaTest: 0.28 });
             const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.78), material);
             mesh.position.copy(normal).multiplyScalar(0.475);
             aimPlane(mesh, normal);
@@ -260,12 +260,13 @@ export class CubeScene {
     canvas.height = 128;
     const context = canvas.getContext("2d");
     if (!context) return null;
-    context.fillStyle = "#7a746a";
-    context.fillRect(0, 0, 128, 128);
-    context.strokeStyle = "#e7e0d4";
-    context.lineWidth = 6;
-    context.setLineDash([12, 8]);
-    context.strokeRect(16, 16, 96, 96);
+    context.clearRect(0, 0, 128, 128);
+    traceRound(context, 14, 14, 100, 100, 22);
+    context.fillStyle = "rgba(255, 255, 255, 0.05)";
+    context.fill();
+    context.strokeStyle = "rgba(244, 247, 255, 0.82)";
+    context.lineWidth = 5;
+    context.stroke();
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     this.blankMap = texture;
@@ -281,14 +282,17 @@ export class CubeScene {
     canvas.height = 128;
     const context = canvas.getContext("2d");
     if (!context) return null;
+    context.clearRect(0, 0, 128, 128);
+    traceRound(context, 6, 6, 116, 116, 26);
     context.fillStyle = STICKER_HEX[color];
-    context.fillRect(0, 0, 128, 128);
+    context.fill();
+    context.clip();
     if (highlighted) {
       context.strokeStyle = LABEL_INK[color];
       context.lineWidth = 8;
       context.strokeRect(8, 8, 112, 112);
     }
-    context.font = "700 78px Outfit, sans-serif";
+    context.font = "700 78px Inter, sans-serif";
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.lineJoin = "round";
@@ -500,6 +504,16 @@ export class CubeScene {
   private onCancel = () => {
     this.dragging = false;
   };
+}
+
+function traceRound(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.arcTo(x + width, y, x + width, y + height, radius);
+  context.arcTo(x + width, y + height, x, y + height, radius);
+  context.arcTo(x, y + height, x, y, radius);
+  context.arcTo(x, y, x + width, y, radius);
+  context.closePath();
 }
 
 function moveSpec(move: string) {
