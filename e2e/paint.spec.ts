@@ -1,21 +1,24 @@
 import { expect, test } from "@playwright/test";
 import { applyMoves, faceletsToString, solvedBytes } from "../src/cube/model";
 import { PAINT_FACES, blankPaint, facePose, faceletIndex, isCentre } from "../src/view/paint";
+import { centreGlyphContrast } from "./glyph-contrast";
 import { paintSticker, waitForFace } from "./paint-click";
 
 const SOLVED = faceletsToString(solvedBytes());
 const NAMES: Record<string, string> = { w: "white", y: "yellow", r: "red", o: "orange", b: "blue", g: "green" };
 
-test("yellow and white centre letters are dark on the sticker", async ({ page }, testInfo) => {
-  test.setTimeout(60_000);
+test("each painted face keeps the centre letter at 4.5:1 in the rendered pixels", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   await page.goto("./");
   await page.getByRole("button", { name: "Enter colours" }).click();
-  for (let step = 0; step < 4; step += 1) await page.getByRole("button", { name: "Next face" }).click();
-  await waitForFace(page, "U");
-  await page.screenshot({ path: `/opt/cursor/artifacts/letter-yellow-${testInfo.project.name}.png` });
-  await page.getByRole("button", { name: "Next face" }).click();
-  await waitForFace(page, "D");
-  await page.screenshot({ path: `/opt/cursor/artifacts/letter-white-${testInfo.project.name}.png` });
+  for (const face of PAINT_FACES) {
+    await waitForFace(page, face);
+    const ratio = await centreGlyphContrast(page, face);
+    expect(ratio, face).toBeGreaterThanOrEqual(4.5);
+    if (face === "U") await page.screenshot({ path: `/opt/cursor/artifacts/letter-yellow-${testInfo.project.name}.png` });
+    if (face === "D") await page.screenshot({ path: `/opt/cursor/artifacts/letter-white-${testInfo.project.name}.png` });
+    if (face !== "D") await page.getByRole("button", { name: "Next face" }).click();
+  }
 });
 
 test("cancel leaves the cube alone", async ({ page }, testInfo) => {
@@ -100,6 +103,14 @@ test("paints a known cube on the 3D faces, then solves it", async ({ page }, tes
   }
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(target, { timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "Edit colours" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Next/ })).toBeVisible();
+  await expect(page.getByTestId("solve-fast")).toBeVisible();
+  await expect(page.getByTestId("lesson-step")).toHaveText(/Expert · Move \d+ of \d+/);
+  await expect(page.getByRole("button", { name: "Enter colours", exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Edit colours" })).toBeVisible();
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(target);
   await expect(page.getByTestId("lesson-step")).toHaveText(/Expert · Move \d+ of \d+/);
   await page.getByTestId("solve-fast").click();
   await expect(page.getByTestId("lesson-step")).toHaveText("Solved", { timeout: 30_000 });
