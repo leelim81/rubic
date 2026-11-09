@@ -19,7 +19,7 @@ const MOVE_ANGLE: Record<string, { axis: "x" | "y" | "z"; layer: (value: number)
 
 interface StickerMesh {
   mesh: THREE.Mesh;
-  material: THREE.MeshStandardMaterial;
+  material: THREE.MeshBasicMaterial;
   normal: THREE.Vector3;
   index: number;
 }
@@ -78,6 +78,7 @@ export class CubeScene {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.NoToneMapping;
     this.camera = new THREE.PerspectiveCamera(32, 1, 0.1, 40);
     this.scene.add(new THREE.HemisphereLight(0xfff6ea, 0x2a241c, 1.15));
     const key = new THREE.DirectionalLight(0xfff7ee, 2.1);
@@ -138,10 +139,7 @@ export class CubeScene {
     this.activeAxis = spec.axis;
     this.scene.add(pivot);
     const moving = this.cubies.filter((cubie) => spec.layer(cubie.home[spec.axis]));
-    for (const cubie of moving) {
-      pivot.attach(cubie.mesh);
-      for (const sticker of cubie.stickers) sticker.material.emissiveIntensity = 0.72;
-    }
+    for (const cubie of moving) pivot.attach(cubie.mesh);
     const finished = await this.tween(pivot, spec.axis, spec.angle, durationMs, token);
     if (!finished || this.generation !== token) {
       this.animating = false;
@@ -203,7 +201,7 @@ export class CubeScene {
           group.add(body);
           const cubie: Cubie = { mesh: group, home: new THREE.Vector3(x, y, z), stickers: [] };
           for (const normal of normalsFor(x, y, z)) {
-            const material = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.02 });
+            const material = new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false });
             const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.78), material);
             mesh.position.copy(normal).multiplyScalar(0.475);
             aimPlane(mesh, normal);
@@ -233,8 +231,6 @@ export class CubeScene {
       const letter = facelets[slot.index] ?? "";
       if (letter === BLANK) {
         sticker.material.color.set(onCurrent ? "#ffffff" : "#5a554c");
-        sticker.material.emissive.set("#000000");
-        sticker.material.emissiveIntensity = 0;
         sticker.material.map = this.blankTexture();
         sticker.material.needsUpdate = true;
         continue;
@@ -245,16 +241,11 @@ export class CubeScene {
       if (!name) continue;
       const showLetter = this.options.letters || highlighted;
       if (showLetter) {
-        sticker.material.color.set("#ffffff");
-        if (!onCurrent) sticker.material.color.multiplyScalar(0.45);
-        sticker.material.emissive.set("#000000");
-        sticker.material.emissiveIntensity = 0;
+        sticker.material.color.set(onCurrent ? "#ffffff" : "#6a645c");
         sticker.material.map = this.texture(name, highlighted);
       } else {
         sticker.material.color.set(STICKER_HEX[name]);
-        if (!onCurrent) sticker.material.color.multiplyScalar(0.34);
-        sticker.material.emissive.set(STICKER_HEX[name]);
-        sticker.material.emissiveIntensity = onCurrent ? 0.22 : 0.04;
+        if (!onCurrent) sticker.material.color.multiplyScalar(0.55);
         sticker.material.map = null;
       }
       sticker.material.needsUpdate = true;
@@ -297,12 +288,16 @@ export class CubeScene {
       context.lineWidth = 8;
       context.strokeRect(8, 8, 112, 112);
     }
-    context.font = "700 64px Outfit, sans-serif";
+    context.font = "700 78px Outfit, sans-serif";
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.lineJoin = "round";
-    context.lineWidth = 8;
+    context.miterLimit = 2;
+    context.lineWidth = 16;
     context.strokeStyle = LABEL_HALO[color];
+    context.strokeText(STICKER_MARK[color], 64, 70);
+    context.lineWidth = 6;
+    context.strokeStyle = LABEL_INK[color];
     context.strokeText(STICKER_MARK[color], 64, 70);
     context.fillStyle = LABEL_INK[color];
     context.fillText(STICKER_MARK[color], 64, 70);

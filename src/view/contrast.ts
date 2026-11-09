@@ -12,20 +12,20 @@ export const STICKER_HEX: Record<ColorName, string> = {
 
 /** Green is a mid tone, so a dark letter is the one that stays above 4.5:1. */
 export const LABEL_INK: Record<ColorName, string> = {
-  white: "#111111",
-  yellow: "#111111",
-  orange: "#111111",
+  white: "#000000",
+  yellow: "#000000",
+  orange: "#000000",
   red: "#ffffff",
   blue: "#ffffff",
-  green: "#111111",
+  green: "#000000",
 };
 
 export const LABEL_HALO: Record<ColorName, string> = {
   white: "#ffffff",
   yellow: "#ffffff",
   orange: "#ffffff",
-  red: "#111111",
-  blue: "#111111",
+  red: "#000000",
+  blue: "#000000",
   green: "#ffffff",
 };
 
@@ -38,19 +38,27 @@ export const STICKER_MARK: Record<ColorName, string> = {
   green: "G",
 };
 
-function channel(hex: string, shift: number): number {
-  const value = parseInt(hex.slice(shift, shift + 2), 16) / 255;
-  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+function linearByte(value: number): number {
+  const channel = value / 255;
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 }
 
-function luminance(hex: string): number {
-  return 0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
+/** WCAG relative luminance from an sRGB pixel. */
+export function byteLuminance(red: number, green: number, blue: number): number {
+  return 0.2126 * linearByte(red) + 0.7152 * linearByte(green) + 0.0722 * linearByte(blue);
 }
 
 /** WCAG 2 contrast ratio. 1 is identical, 21 is black on white. */
-export function contrastRatio(background: string, foreground: string): number {
-  const lighter = luminance(background);
-  const darker = luminance(foreground);
+export function contrastOfLuminance(lighter: number, darker: number): number {
   const [hi, lo] = lighter > darker ? [lighter, darker] : [darker, lighter];
   return (hi + 0.05) / (lo + 0.05);
+}
+
+function luminance(hex: string): number {
+  const value = parseInt(hex.slice(1), 16);
+  return byteLuminance((value >> 16) & 255, (value >> 8) & 255, value & 255);
+}
+
+export function contrastRatio(background: string, foreground: string): number {
+  return contrastOfLuminance(luminance(background), luminance(foreground));
 }
