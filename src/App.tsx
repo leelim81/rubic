@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { COLORS, type ColorName, type Face, applyMoves, centerColor, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
 import { validateFaceletString } from "./cube/validate";
-import { solveInWorker } from "./solveClient";
+import { solveInWorker, type SolveMethod } from "./solveClient";
 import {
   advanceLesson,
   applyUserMove,
@@ -29,7 +29,6 @@ const STORAGE = "rubic-lesson-v1";
 export function App() {
   const [lesson, setLesson] = useState<Lesson>(() => loadLesson());
   const [letters, setLetters] = useState(true);
-  const [gesture, setGesture] = useState<"view" | "turn">("view");
   const [viewShift, setViewShift] = useState(false);
   const [mode, setMode] = useState<"cube" | "manual">("cube");
   const [checkpoint, setCheckpoint] = useState<Lesson | null>(null);
@@ -43,6 +42,7 @@ export function App() {
   const runToken = useRef(0);
   const lessonRef = useRef(lesson);
   const [turnMs, setTurnMs] = useState(750);
+  const [method, setMethod] = useState<SolveMethod>("beginner");
   lessonRef.current = lesson;
   const facelets = currentFacelets(lesson);
   const nextMove = lesson.moves[lesson.cursor];
@@ -60,12 +60,6 @@ export function App() {
       if (mode !== "cube") return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) return;
-      const key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
-      if ("UDRLFB".includes(key) && key.length === 1) {
-        event.preventDefault();
-        void run(() => userTurn(event.shiftKey ? `${key}'` : key));
-        return;
-      }
       if (event.key === "n" || event.key === "N") void run(() => go(1));
       if (event.key === "p" || event.key === "P" || event.key === "Backspace") void run(() => go(-1));
       if (event.key === "Escape") setMode("cube");
@@ -89,11 +83,11 @@ export function App() {
     }
   }
 
-  async function load(start: string, notice: string | null = null) {
+  async function load(start: string, notice: string | null = null, chosen: SolveMethod = method) {
     setLoading(true);
     setError(null);
     try {
-      const solution = await solveInWorker(start);
+      const solution = await solveInWorker(start, chosen);
       setLesson((current) => withSolution({ ...current, history: [] }, start, solution, notice));
       setCheckpoint(null);
       setMode("cube");
@@ -166,7 +160,7 @@ export function App() {
     await cubeRef.current?.animate(move, next);
     setLoading(true);
     try {
-      const solution = await solveInWorker(next);
+      const solution = await solveInWorker(next, method);
       setCheckpoint(null);
       setLesson((current) => endAnimation(branchFrom(current, next, solution, move, `${move} starts a new solution. ${invertMove(move)} returns to the previous one.`)));
     } catch (caught) {
@@ -244,58 +238,46 @@ export function App() {
     cubeRef.current?.show(currentFacelets(restored));
   }
 
-  const moveLine = nextMove ? plainMove(nextMove) : lesson.cursor > 0 ? plainMove(lesson.moves[lesson.cursor - 1] ?? "") : "";
+  const finished = !nextMove && !lesson.pending;
+  const moveLine = finished || !lesson.moves.length ? "" : `Move ${Math.min(lesson.cursor + 1, lesson.moves.length)} of ${lesson.moves.length}${nextMove ? ` · ${plainMove(nextMove)}` : ""}`;
 
   return (
     <div className="app">
       <header className="top">
-        <div>
-          <p className="mark">Rubic</p>
-          <p className="tag">One cube. Next turns a layer.</p>
-        </div>
+        <p className="mark">Rubic</p>
         <nav aria-label="Primary">
-          <button type="button" onClick={() => setMode("manual")}>Enter colours</button>
+          <button type="button" className="text-button" onClick={() => setMode("manual")}>Enter colours</button>
         </nav>
       </header>
       {mode === "manual" ? <ManualEntry onCancel={() => setMode("cube")} onAccept={(value) => void load(value, "Solution started from the colours you entered.")} /> : null}
       <main className={mode === "cube" ? "" : "hidden-mode"}>
         <section className="stage-column" aria-labelledby="cube-title">
-          <div className="progress" aria-live="polite">
-            <p id="cube-title">{labels.stage}</p>
-            <p data-testid="lesson-step">{labels.step}</p>
+          <div className="status" aria-live="polite">
+            <p id="cube-title" className="status-title" data-testid="lesson-step">{labels.step}</p>
+            {moveLine ? <p className="move-line" data-testid="move-line">{moveLine}</p> : null}
           </div>
-          {moveLine ? <p className="move-line" data-testid="move-line">{moveLine}</p> : null}
-          <div className="gesture-toggle" role="group" aria-label="How a drag on the cube behaves">
-            <button type="button" className={gesture === "view" ? "on" : ""} aria-pressed={gesture === "view"} onClick={() => setGesture("view")}>Rotate view</button>
-            <button type="button" className={gesture === "turn" ? "on" : ""} aria-pressed={gesture === "turn"} onClick={() => setGesture("turn")}>Turn a face</button>
-          </div>
-          <p className="quiet" id="gesture-help">
-            {gesture === "view"
-              ? "Drag anywhere on the cube to look around. Pieces stay where they are."
-              : "Drag a sticker the way that layer should slide. One piece cannot turn by itself."}
-          </p>
-          <div className="cube-frame">
-            <CubeView
-              ref={cubeRef}
-              facelets={facelets}
-              letters={letters}
-              gesture={gesture}
-              label={cubeLabel(facelets, nextMove)}
-              onTurn={(move) => void run(() => userTurn(move))}
-              onViewShift={onViewShift}
-              onGesture={onGesture}
-              turnMs={turnMs}
-            />
+          <div className="hero">
+            <div className="cube-frame">
+              <CubeView
+                ref={cubeRef}
+                facelets={facelets}
+                letters={letters}
+                gesture="view"
+                label={cubeLabel(facelets, finished ? undefined : nextMove)}
+                onViewShift={onViewShift}
+                onGesture={onGesture}
+                turnMs={turnMs}
+              />
+            </div>
           </div>
           <p className="sr-only" data-testid="lesson-facelets">{facelets}</p>
-          <p className="hold-banner">{holdLine(stringToFacelets(facelets))}</p>
-          {viewShift ? <p className="view-warning" role="status">The view has moved. Face buttons and the solution still use the hold above, not whichever side faces the screen. <button type="button" onClick={() => cubeRef.current?.resetView()}>Reset view</button></p> : null}
+          {viewShift ? <p className="view-warning" role="status">The view has moved. Moves still follow the original hold. <button type="button" onClick={() => cubeRef.current?.resetView()}>Reset view</button></p> : null}
           <div className="controls">
-            <button type="button" onClick={() => void run(() => go(-1))} disabled={running || lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0 && !lesson.pending)}>Back</button>
+            <button type="button" className="back" onClick={() => void run(() => go(-1))} disabled={running || lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0 && !lesson.pending)}>Back</button>
             <button type="button" className="primary" onClick={() => void run(() => go(1))} disabled={running || lesson.busy || loading || (!nextMove && lesson.pending?.intent !== "do") || lesson.pending?.intent === "undo"}>Next{lesson.pending?.intent === "do" ? ` · ${lesson.pending.move}` : nextMove ? ` · ${nextMove}` : ""}</button>
             <button type="button" className="fast" data-testid="solve-fast" onClick={() => void solveFast()} disabled={running || lesson.busy || loading || !advanceLesson(lesson)}>Solve 3×</button>
-            <button type="button" className="stop" data-testid="stop-solve" onClick={stopSolve} disabled={!running}>Stop</button>
-            <button type="button" className="restore" data-testid="restore-solve" onClick={restoreSolve} disabled={!checkpoint} aria-label="Restore before solve"><span className="restore-long">Restore before solve</span><span className="restore-short">Restore</span></button>
+            <button type="button" className={running ? "stop" : "stop is-quiet"} data-testid="stop-solve" onClick={stopSolve} disabled={!running} aria-hidden={!running} tabIndex={running ? 0 : -1}>Stop</button>
+            <button type="button" className={checkpoint ? "restore" : "restore is-quiet"} data-testid="restore-solve" onClick={restoreSolve} disabled={!checkpoint} aria-hidden={!checkpoint} tabIndex={checkpoint ? 0 : -1} aria-label="Restore before solve"><span className="restore-long">Restore before solve</span><span className="restore-short">Restore</span></button>
           </div>
           {gestureNote ? <p className="notice" role="status">{gestureNote}</p> : null}
           {lesson.notice ? <p className="notice" role="status">{lesson.notice}</p> : null}
@@ -304,6 +286,17 @@ export function App() {
           {reduced ? <p className="quiet">Reduced motion is on. Moves jump to the next state, and the move letter is still announced above.</p> : null}
           <Disclosure className="options-panel" show="Options" hide="Hide options" controls="options-panel">
             <label className="speed-label">
+              Solution
+              <select aria-label="Solution method" value={method} onChange={(event) => {
+                const chosen = event.target.value === "short" ? "short" : "beginner";
+                setMethod(chosen);
+                void load(facelets, null, chosen);
+              }}>
+                <option value="beginner">Beginner</option>
+                <option value="short">Shortest</option>
+              </select>
+            </label>
+            <label className="speed-label">
               Speed
               <select aria-label="Turn speed" value={turnMs} onChange={(event) => setTurnMs(Number(event.target.value))}>
                 <option value={900}>Slow</option>
@@ -311,13 +304,6 @@ export function App() {
                 <option value={600}>Fast</option>
               </select>
             </label>
-            <div className="face-pad" role="group" aria-label="Turn a face. These follow the hold, not the camera.">
-              {FACE_BUTTONS.map((button) => (
-                <button key={button.move} type="button" onClick={() => void run(() => userTurn(button.move))} disabled={running || lesson.busy || loading} title={button.accessible}>
-                  {button.label} <span className="move-code">{button.move}</span>
-                </button>
-              ))}
-            </div>
             <div className="row secondary-actions">
               <button type="button" onClick={() => void load(faceletsToString(applyScramble()), null)} disabled={running || lesson.busy || loading}>Scramble</button>
               <button type="button" onClick={() => { setCheckpoint(null); setLesson(emptyLesson(SOLVED)); setError(null); }} disabled={running || lesson.busy}>Reset</button>
@@ -328,6 +314,7 @@ export function App() {
               <input type="checkbox" checked={letters} onChange={(event) => setLetters(event.target.checked)} />
               Letter stickers (W Y R O B G) as well as colour
             </label>
+            <p className="quiet">{holdLine(stringToFacelets(facelets))}</p>
             <p className="quiet">R means the right face, not red. A letter alone is clockwise as you look at that face. 2 is a half turn. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the cube as it was when that run started.</p>
             <p className="quiet">Ordinary Western 3×3: white opposite yellow, red opposite orange, blue opposite green. Colours stay in this browser. The solution is a two-phase search, not a claim of the shortest sequence.</p>
           </Disclosure>
@@ -400,21 +387,6 @@ function PaletteChoice({ paint, onPaint }: { paint: ColorName; onPaint: (name: C
     </div>
   );
 }
-
-const FACE_BUTTONS: { move: string; label: string; accessible: string }[] = [
-  { move: "U", label: "Top, front edge left", accessible: "Turn the top face so its front edge moves left. Notation U." },
-  { move: "U'", label: "Top, front edge right", accessible: "Turn the top face so its front edge moves right. Notation U prime." },
-  { move: "F", label: "Front, clockwise", accessible: "Turn the front face clockwise, so its top edge moves right. Notation F." },
-  { move: "F'", label: "Front, anticlockwise", accessible: "Turn the front face anticlockwise, so its top edge moves left. Notation F prime." },
-  { move: "R", label: "Right, front edge up", accessible: "Turn the right face so its front edge moves up. Notation R." },
-  { move: "R'", label: "Right, front edge down", accessible: "Turn the right face so its front edge moves down. Notation R prime." },
-  { move: "L", label: "Left, front edge down", accessible: "Turn the left face so its front edge moves down. Notation L." },
-  { move: "L'", label: "Left, front edge up", accessible: "Turn the left face so its front edge moves up. Notation L prime." },
-  { move: "D", label: "Bottom, front edge right", accessible: "Turn the bottom face so its front edge moves right. Notation D." },
-  { move: "D'", label: "Bottom, front edge left", accessible: "Turn the bottom face so its front edge moves left. Notation D prime." },
-  { move: "B", label: "Back, top edge left", accessible: "Turn the back face so its top edge, seen from the front, moves left. Notation B." },
-  { move: "B'", label: "Back, top edge right", accessible: "Turn the back face so its top edge, seen from the front, moves right. Notation B prime." },
-];
 
 function plainMove(move: string): string {
   if (move.endsWith("2")) {

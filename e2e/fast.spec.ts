@@ -102,26 +102,7 @@ test("a pointer click stops a long valid solve and restore returns that start", 
   if (testInfo.project.name === "mobile") await restore.tap();
   else await restore.click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(start);
-  const turn = page.getByRole("button", { name: "Turn a face" });
-  await placeAbove(page, turn, ".controls");
-  const turnBox = await turn.boundingBox();
-  const bar = await page.locator(".controls").boundingBox();
-  expect(overlaps(turnBox, bar)).toBe(false);
-  expect(inView(turnBox, page.viewportSize()!)).toBe(true);
-  if (testInfo.project.name === "mobile") await turn.tap();
-  else await turn.click();
-  await expect(turn).toHaveAttribute("aria-pressed", "true");
 });
-
-async function placeAbove(page: Page, target: ReturnType<Page["getByRole"]>, barSelector: string) {
-  await target.scrollIntoViewIfNeeded();
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const box = await target.boundingBox();
-    const bar = await page.locator(barSelector).boundingBox();
-    if (!overlaps(box, bar)) return;
-    await page.evaluate((delta) => window.scrollBy(0, delta), (box!.y + box!.height) - bar!.y + 16);
-  }
-}
 
 function overlaps(
   a: { x: number; y: number; width: number; height: number } | null,

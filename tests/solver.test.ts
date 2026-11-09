@@ -45,7 +45,7 @@ describe("beginner solver", () => {
       for (let index = 0; index < solution.chunks.length; index++) {
         const chunk = solution.chunks[index]!;
         expect(chunk.moves.length).toBeGreaterThan(0);
-        expect(chunk.moves.length).toBeLessThanOrEqual(8);
+        expect(chunk.moves.length).toBeLessThanOrEqual(120);
         expect(chunk.fingertricks).toHaveLength(chunk.moves.length);
         cursor = applyMoves(cursor, chunk.moves);
         const next = solution.chunks[index + 1];

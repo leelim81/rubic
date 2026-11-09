@@ -1,8 +1,7 @@
 import * as THREE from "three";
 import { type ColorName, type Face, FACES, faceOffset, stringToFacelets } from "../cube/model";
 import { SLOTS } from "../cube/model";
-import { cameraBasis, cameraDistance, HOME_PHI, HOME_THETA, orbitBy, TURN_DRAG_PX, viewIsShifted } from "./camera";
-import { resolveTurn } from "./drag";
+import { cameraDistance, HOME_PHI, HOME_THETA, orbitBy, viewIsShifted } from "./camera";
 
 const STICKER: Record<ColorName, string> = {
   white: "#f3f0e8",
@@ -70,9 +69,7 @@ export class CubeScene {
   private phi = HOME_PHI;
   private radius = 11;
   private dragging = false;
-  private down = { x: 0, y: 0 };
   private pointer = { x: 0, y: 0 };
-  private hit: { position: THREE.Vector3; normal: THREE.Vector3 } | null = null;
   private highlight = new Set<number>();
   private activePivot: THREE.Group | null = null;
   private activeAxis: "x" | "y" | "z" | null = null;
@@ -102,16 +99,8 @@ export class CubeScene {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas.parentElement ?? canvas);
     this.resize();
-    const exposed = this.canvas as HTMLCanvasElement & {
-      __rubicSample?: () => unknown;
-      __rubicHit?: (x: number, y: number) => { x: number; y: number; z: number } | null;
-    };
+    const exposed = this.canvas as HTMLCanvasElement & { __rubicSample?: () => unknown };
     exposed.__rubicSample = () => this.sampleCubies();
-    exposed.__rubicHit = (x, y) => {
-      const rect = this.canvas.getBoundingClientRect();
-      const hit = this.pick({ clientX: rect.left + x, clientY: rect.top + y } as PointerEvent);
-      return hit ? { x: hit.normal.x, y: hit.normal.y, z: hit.normal.z } : null;
-    };
     this.canvas.addEventListener("pointerdown", this.onDown, { passive: false });
     this.canvas.addEventListener("pointermove", this.onMove, { passive: false });
     this.canvas.addEventListener("pointerup", this.onUp);
@@ -367,19 +356,17 @@ export class CubeScene {
   private onDown = (event: PointerEvent) => {
     if (this.animating || this.options.gesture === "off") return;
     this.dragging = true;
-    this.down = { x: event.clientX, y: event.clientY };
     this.pointer = { x: event.clientX, y: event.clientY };
-    this.hit = this.options.gesture === "turn" ? this.pick(event) : null;
     try {
       this.canvas.setPointerCapture(event.pointerId);
     } catch {
       // Dispatched test events have no active pointer. The listeners still run.
     }
-    if (this.options.gesture === "view") event.preventDefault();
+    event.preventDefault();
   };
 
   private onMove = (event: PointerEvent) => {
-    if (!this.dragging || this.animating || this.options.gesture !== "view") return;
+    if (!this.dragging || this.animating || this.options.gesture === "off") return;
     const dx = event.clientX - this.pointer.x;
     const dy = event.clientY - this.pointer.y;
     if (dx === 0 && dy === 0) return;
@@ -393,71 +380,13 @@ export class CubeScene {
     event.preventDefault();
   };
 
-  private onUp = (event: PointerEvent) => {
-    if (!this.dragging) return;
-    const dx = event.clientX - this.down.x;
-    const dy = event.clientY - this.down.y;
-    const hit = this.hit;
+  private onUp = () => {
     this.dragging = false;
-    this.hit = null;
-    if (this.options.gesture !== "turn" || this.animating) return;
-    if (!hit) {
-      this.options.onGesture?.("The drag started off the cube. Put the pointer on a sticker.");
-      return;
-    }
-    if (dx * dx + dy * dy < TURN_DRAG_PX * TURN_DRAG_PX) {
-      this.options.onGesture?.("Too short to turn a face. Drag further across the sticker, or use a face button.");
-      return;
-    }
-    const result = this.dragMove(dx, dy, hit);
-    if (result.move) {
-      this.options.onGesture?.(null);
-      this.options.onTurn?.(result.move);
-      return;
-    }
-    this.options.onGesture?.(
-      result.reason === "ambiguous"
-        ? "That drag fits two layers, so neither turned. Drag along one edge, or use a face button."
-        : "That drag does not pick a layer. Drag across the face, not straight out from its centre.",
-    );
   };
 
   private onCancel = () => {
     this.dragging = false;
-    this.hit = null;
   };
-
-  private pick(event: PointerEvent) {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2(x, y), this.camera);
-    const hits = ray.intersectObjects(this.stickers.map((sticker) => sticker.mesh), false);
-    const hit = hits[0];
-    if (!hit) return null;
-    const sticker = this.stickers.find((item) => item.mesh === hit.object);
-    if (!sticker) return null;
-    const cubie = this.cubies.find((item) => item.stickers.includes(sticker));
-    if (!cubie) return null;
-    return { position: cubie.home.clone(), normal: sticker.normal.clone() };
-  }
-
-  private dragMove(dx: number, dy: number, hit: { position: THREE.Vector3; normal: THREE.Vector3 }) {
-    const { right, up, forward } = cameraBasis(this.theta, this.phi);
-    const drag = {
-      x: right.x * dx + up.x * -dy,
-      y: right.y * dx + up.y * -dy,
-      z: right.z * dx + up.z * -dy,
-    };
-    return resolveTurn(
-      { x: hit.position.x, y: hit.position.y, z: hit.position.z },
-      { x: hit.normal.x, y: hit.normal.y, z: hit.normal.z },
-      drag,
-      up,
-      forward,
-    );
-  }
 }
 
 function moveSpec(move: string) {

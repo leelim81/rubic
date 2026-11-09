@@ -1,9 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { applyMoves, faceletsToString, solvedBytes } from "../src/cube/model";
 import { emptyLesson, withSolution } from "../src/state/lesson";
-import { solveCube } from "../src/solver/twoPhase";
-import { HOME_PHI, HOME_THETA, cameraBasis, dragInCubeSpace, orbitBy, projectToScreen } from "../src/view/camera";
-import { resolveTurn } from "../src/view/drag";
+import { HOME_PHI, HOME_THETA, orbitBy, projectToScreen } from "../src/view/camera";
 
 const SOLVED = faceletsToString(solvedBytes());
 
@@ -82,254 +80,45 @@ test("dragging the cube in rotate-view mode orbits and does not turn a layer", a
   expect(Buffer.compare(before, await canvas.screenshot())).not.toBe(0);
 });
 
-test("turn mode follows the sticker, a short drag cancels, and buttons invert it", async ({ page }) => {
-  await page.getByRole("button", { name: "Turn a face" }).click();
-  await expect(page.getByRole("button", { name: "Turn a face" })).toHaveAttribute("aria-pressed", "true");
-  const { box } = await frame(page);
-  const from = projectToScreen({ x: 0, y: 1, z: 1 }, box.width, box.height, HOME_THETA, HOME_PHI);
-  await mouseDrag(page, box, from, { x: from.x + 8, y: from.y });
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED);
-
-  const move = expectedMove(HOME_THETA, HOME_PHI, -48, 0, { x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 });
-  expect(move).toBe("U");
-  const placed = await frame(page);
-  const sticker = projectToScreen({ x: 0, y: 1, z: 1 }, placed.box.width, placed.box.height, HOME_THETA, HOME_PHI);
-  await dragOnCanvas(placed.canvas, sticker, { x: sticker.x - 48, y: sticker.y });
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), [move!])));
-  await page.locator("details.options-panel summary").click();
-  await page.getByRole("button", { name: "Top, front edge right" }).click();
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
-});
-
-test("a touch drag and a rotated view still turn the layer the finger follows", async ({ page }) => {
-  const { canvas, box } = await frame(page);
-  const orbit = Math.round(box.width * 0.14);
-  await mouseDrag(page, box, { x: box.width * 0.5, y: box.height * 0.5 }, { x: box.width * 0.5 + orbit, y: box.height * 0.5 });
-  const view = orbitBy(HOME_THETA, HOME_PHI, orbit, 0, box.width, box.height);
-  await page.getByRole("button", { name: "Turn a face" }).click();
-  const guess = projectToScreen({ x: 0, y: 1, z: 1 }, box.width, box.height, view.theta, view.phi);
-  const from = await pointOnFace(canvas, guess, { x: 0, y: 0, z: 1 }, "guess");
-  const move = expectedMove(view.theta, view.phi, -40, 6, { x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 });
-  expect(move).toBeTruthy();
-  const fresh = await canvas.boundingBox();
-  if (!fresh) throw new Error("The lesson cube is not on screen.");
-  await touchDrag(canvas, fresh, from, { x: from.x - 40, y: from.y + 6 });
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), [move!])));
-});
-
-test("a short drag explains itself and does not change the cube", async ({ page }) => {
-  await page.getByRole("button", { name: "Turn a face" }).click();
-  const { box } = await frame(page);
-  const from = projectToScreen({ x: 0, y: 0, z: 1.4 }, box.width, box.height, HOME_THETA, HOME_PHI);
+test("a drag never turns a face or changes the step, and there is no mode switch", async ({ page }) => {
+  await expect(page.getByRole("radio", { name: /Rotate view|Turn a face/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Rotate view|Turn a face/ })).toHaveCount(0);
+  const start = faceletsToString(applyMoves(solvedBytes(), ["R", "U"]));
+  await installLesson(page, start, ["U'", "R'"]);
   const before = await page.getByTestId("lesson-facelets").textContent();
-  await mouseDrag(page, box, from, { x: from.x + 8, y: from.y });
-  await expect(page.getByRole("status").filter({ hasText: "Too short to turn a face" })).toBeVisible();
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(before ?? "");
-});
-
-test("a quarter-turn lesson steps forward and back, and a wrong turn stays put", async ({ page }) => {
-  const start = faceletsToString(applyMoves(solvedBytes(), ["U"]));
-  await installLesson(page, start);
-  const step = page.getByTestId("lesson-step");
-  await expect(page.getByRole("button", { name: /^Next/ })).toHaveText(/U'/);
-  const before = await page.getByTestId("lesson-facelets").textContent();
-  await page.locator("details.options-panel summary").click();
-  await page.getByRole("button", { name: "Top, front edge right U'", exact: true }).click();
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
-  await page.getByRole("button", { name: "Top, front edge left U", exact: true }).click();
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(before ?? "", { timeout: 15_000 });
-  await expect(page.getByRole("button", { name: /^Next/ })).toHaveText(/U'/);
-  await page.getByRole("button", { name: "Front, clockwise F", exact: true }).click();
-  await page.getByRole("button", { name: "Front, clockwise F", exact: true }).click();
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(before ?? "");
-  await expect(step).toContainText("Step 1 of");
-  await expect(page.getByRole("status").filter({ hasText: "not the next move" })).toBeVisible();
-});
-
-test("a half turn is two matching quarters, and the other direction works too", async ({ page }) => {
-  test.setTimeout(120_000);
-  for (const face of ["U", "D", "F", "B", "L", "R"] as const) {
-    const start = faceletsToString(applyMoves(solvedBytes(), [`${face}2`]));
-    expect(solveCube(start).moves[0]).toBe(`${face}2`);
-    await installLesson(page, start, [`${face}2`]);
-    await expect(page.getByRole("button", { name: /^Next/ })).toHaveText(new RegExp(`${face}2`));
-    await expect(page.getByTestId("lesson-step")).toContainText("quarter 1 of 2");
-    await page.locator("details.options-panel summary").click();
-    const clockwise = FACE_BUTTON[face]!;
-    const prime = FACE_BUTTON[`${face}'`]!;
-    await page.getByRole("button", { name: `${clockwise} ${face}`, exact: true }).click();
-    await expect(page.getByTestId("lesson-step")).toContainText("1 of 2");
-    const wrong = face === "U" ? "F" : "U";
-    await page.getByRole("button", { name: `${FACE_BUTTON[wrong]} ${wrong}`, exact: true }).click();
-    await expect(page.getByTestId("lesson-step")).toContainText("1 of 2");
-    await page.getByRole("button", { name: `${prime} ${face}'`, exact: true }).click();
-    await expect(page.getByTestId("lesson-step")).toContainText("quarter 1 of 2");
-    await page.getByRole("button", { name: `${prime} ${face}'`, exact: true }).click();
-    await page.getByRole("button", { name: `${prime} ${face}'`, exact: true }).click();
-    await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
-    await page.getByRole("button", { name: "Back", exact: true }).click();
-    await expect(page.getByTestId("lesson-facelets")).toHaveText(start, { timeout: 15_000 });
-    await expect(page.getByRole("button", { name: /^Next/ })).toHaveText(new RegExp(`${face}2`));
-  }
-});
-
-test("two right-face drags finish R2 at home and after the view turns", async ({ page }) => {
-  test.setTimeout(90_000);
-  const start = faceletsToString(applyMoves(solvedBytes(), ["R2"]));
-  await installLesson(page, start);
-  await page.getByRole("button", { name: "Turn a face" }).click();
+  const step = await page.getByTestId("lesson-step").textContent();
   const { canvas, box } = await frame(page);
-  const home = await pointOnFace(canvas, projectToScreen({ x: 1.48, y: 0, z: 0 }, box.width, box.height, HOME_THETA, HOME_PHI), { x: 1, y: 0, z: 0 });
-  await mouseDrag(page, box, home, { x: home.x, y: home.y - 50 });
-  await expect(page.getByTestId("lesson-step")).toContainText("Do R again");
-  await mouseDrag(page, box, home, { x: home.x, y: home.y - 50 });
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(start, { timeout: 15_000 });
-  await page.getByRole("button", { name: "Rotate view" }).click();
-  const again = await frame(page);
-  const orbit = Math.round(again.box.width * 0.045);
-  await mouseDrag(page, again.box, { x: again.box.width * 0.55, y: again.box.height * 0.5 }, { x: again.box.width * 0.55 + orbit, y: again.box.height * 0.5 });
-  const view = orbitBy(HOME_THETA, HOME_PHI, orbit, 0, again.box.width, again.box.height);
-  await page.getByRole("button", { name: "Turn a face" }).click();
-  const placed = await frame(page);
-  const shifted = await pointOnFace(placed.canvas, projectToScreen({ x: 1.48, y: 0, z: 0 }, placed.box.width, placed.box.height, view.theta, view.phi), { x: 1, y: 0, z: 0 });
-  await mouseDrag(page, placed.box, shifted, { x: shifted.x, y: shifted.y - 55 });
-  await expect(page.getByTestId("lesson-step")).toContainText("Do R again");
-  const after = await frame(page);
-  const againPoint = await pointOnFace(after.canvas, shifted, { x: 1, y: 0, z: 0 });
-  await mouseDrag(page, after.box, againPoint, { x: againPoint.x, y: againPoint.y - 55 });
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
+  await mouseDrag(page, box, { x: box.width * 0.62, y: box.height * 0.5 }, { x: box.width * 0.62, y: box.height * 0.5 - 70 });
+  await mouseDrag(page, box, { x: box.width * 0.35, y: box.height * 0.28 }, { x: box.width * 0.7, y: box.height * 0.28 });
+  await touchDrag(canvas, box, { x: box.width * 0.4, y: box.height * 0.55 }, { x: box.width * 0.4 + 50, y: box.height * 0.55 - 20 });
+  await expect(page.getByTestId("lesson-facelets")).toHaveText(before ?? "");
+  await expect(page.getByTestId("lesson-step")).toHaveText(step ?? "");
 });
 
-test("an upward drag on the right face turns that face, including after the view rotates", async ({ page }) => {
-  test.setTimeout(90_000);
-  await page.getByRole("button", { name: "Turn a face" }).click();
-  const turned = faceletsToString(applyMoves(solvedBytes(), ["R"]));
-  const { box } = await frame(page);
-  const home = await pointOnFace(page.locator(".cube-frame canvas"), projectToScreen({ x: 1.48, y: 0, z: 0 }, box.width, box.height, HOME_THETA, HOME_PHI), { x: 1, y: 0, z: 0 });
-  await mouseDrag(page, box, home, { x: home.x, y: home.y - 50 });
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(turned, { timeout: 15_000 });
-  await page.locator("details.options-panel summary").click();
-  await page.getByRole("button", { name: "Reset", exact: true }).click();
-  await expect(page.getByText("No moves needed")).toBeVisible();
-  await page.getByRole("button", { name: "Rotate view" }).click();
-  const again = await frame(page);
-  const orbit = 16;
-  await mouseDrag(page, again.box, { x: again.box.width * 0.55, y: again.box.height * 0.5 }, { x: again.box.width * 0.55 + orbit, y: again.box.height * 0.5 });
-  const view = orbitBy(HOME_THETA, HOME_PHI, orbit, 0, again.box.width, again.box.height);
-  await page.getByRole("button", { name: "Turn a face" }).click();
-  const placed = await frame(page);
-  const shifted = await pointOnFace(placed.canvas, projectToScreen({ x: 1.48, y: 0, z: 0 }, placed.box.width, placed.box.height, view.theta, view.phi), { x: 1, y: 0, z: 0 });
-  await dragOnCanvas(placed.canvas, shifted, { x: shifted.x, y: shifted.y - 60 });
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(turned, { timeout: 15_000 });
-});
-
-test("face buttons turn the held cube and the opposite button undoes it", async ({ page }) => {
-  await page.locator("details.options-panel summary").click();
-  await page.getByRole("button", { name: "Right, front edge up" }).click();
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(faceletsToString(applyMoves(solvedBytes(), ["R"])), { timeout: 15_000 });
-  await page.getByRole("button", { name: "Right, front edge down" }).click();
-  await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED, { timeout: 15_000 });
-});
-
-const FACE_BUTTON: Record<string, string> = {
-  U: "Top, front edge left",
-  "U'": "Top, front edge right",
-  F: "Front, clockwise",
-  "F'": "Front, anticlockwise",
-  R: "Right, front edge up",
-  "R'": "Right, front edge down",
-  L: "Left, front edge down",
-  "L'": "Left, front edge up",
-  D: "Bottom, front edge right",
-  "D'": "Bottom, front edge left",
-  B: "Back, top edge left",
-  "B'": "Back, top edge right",
-};
-
-function invert(move: string): string {
-  if (move.endsWith("2")) return move;
-  if (move.endsWith("'")) return move[0] ?? move;
-  return `${move}'`;
-}
-
-async function installLesson(page: Page, start: string, moves?: string[]) {
-  const solution = moves
-    ? {
-        moves,
-        chunkOfMove: moves.map(() => 0),
-        chunks: [{
-          id: "script",
-          stageId: "solve",
-          stageNumber: 0,
-          stageName: "Solve",
-          title: "Solve",
-          goal: "",
-          why: "",
-          caseName: "script",
-          hold: "",
-          moves,
-          focus: [],
-          advice: "",
-          tip: null,
-          fingertricks: moves.map(() => ""),
-        }],
-      }
-    : solveCube(start);
-  const lesson = withSolution(emptyLesson(SOLVED), start, solution);
+async function installLesson(page: Page, start: string, moves: string[]) {
+  const lesson = withSolution(emptyLesson(SOLVED), start, {
+    moves,
+    chunkOfMove: moves.map(() => 0),
+    chunks: [{
+      id: "script",
+      stageId: "cross",
+      stageNumber: 1,
+      stageName: "White cross",
+      title: "Solve",
+      goal: "",
+      why: "",
+      caseName: "script",
+      hold: "",
+      moves,
+      focus: [],
+      advice: "",
+      tip: null,
+      fingertricks: moves.map(() => ""),
+    }],
+  });
   await page.evaluate((data) => sessionStorage.setItem("rubic-lesson-v1", JSON.stringify(data)), lesson);
   await page.reload();
   await page.getByTestId("lesson-facelets").waitFor();
-}
-
-function expectedMove(
-  theta: number,
-  phi: number,
-  dx: number,
-  dy: number,
-  position: { x: number; y: number; z: number },
-  normal: { x: number; y: number; z: number },
-) {
-  return resolveTurn(position, normal, dragInCubeSpace(dx, dy, theta, phi), cameraBasis(theta, phi).up, cameraBasis(theta, phi).forward).move;
-}
-
-async function pointOnFace(canvas: Locator, guess: { x: number; y: number }, normal: { x: number; y: number; z: number }, prefer: "centre" | "guess" = "centre") {
-  const point = await canvas.evaluate((el, query) => {
-    const hit = (el as HTMLCanvasElement & { __rubicHit?: (x: number, y: number) => { x: number; y: number; z: number } | null }).__rubicHit;
-    if (!hit) return null;
-    let count = 0;
-    let sx = 0;
-    let sy = 0;
-    for (let y = 4; y < el.clientHeight - 4; y += 4) {
-      for (let x = 4; x < el.clientWidth - 4; x += 4) {
-        const found = hit(x, y);
-        if (!found || found.x !== query.normal.x || found.y !== query.normal.y || found.z !== query.normal.z) continue;
-        sx += x;
-        sy += y;
-        count += 1;
-      }
-    }
-    if (!count) return null;
-    const cx = query.prefer === "guess" ? query.x : sx / count;
-    const cy = query.prefer === "guess" ? query.y : sy / count;
-    let best: { x: number; y: number } | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (let y = 4; y < el.clientHeight - 4; y += 4) {
-      for (let x = 4; x < el.clientWidth - 4; x += 4) {
-        const found = hit(x, y);
-        if (!found || found.x !== query.normal.x || found.y !== query.normal.y || found.z !== query.normal.z) continue;
-        const distance = (x - cx) ** 2 + (y - cy) ** 2;
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          best = { x, y };
-        }
-      }
-    }
-    return best;
-  }, { x: guess.x, y: guess.y, normal, prefer });
-  expect(point, "The face under that drag is not on the cube.").toBeTruthy();
-  return point!;
 }
 
 async function frame(page: Page) {
@@ -380,25 +169,6 @@ async function dragCanvas(page: Page, canvas: Locator, dx: number, dy: number) {
   if (!box) throw new Error("The lesson cube is not on screen.");
   const from = { x: box.width * 0.5, y: box.height * 0.48 };
   await mouseDrag(page, box, from, { x: from.x + dx, y: from.y + dy });
-}
-
-async function dragOnCanvas(canvas: Locator, from: { x: number; y: number }, to: { x: number; y: number }) {
-  await canvas.evaluate((el, drag) => {
-    const rect = el.getBoundingClientRect();
-    const fire = (type: string, x: number, y: number, buttons: number) => {
-      el.dispatchEvent(new PointerEvent(type, {
-        clientX: rect.left + x,
-        clientY: rect.top + y,
-        pointerId: 1,
-        pointerType: "mouse",
-        bubbles: true,
-        buttons,
-      }));
-    };
-    fire("pointerdown", drag.fromX, drag.fromY, 1);
-    fire("pointermove", drag.toX, drag.toY, 1);
-    fire("pointerup", drag.toX, drag.toY, 0);
-  }, { fromX: from.x, fromY: from.y, toX: to.x, toY: to.y });
 }
 
 async function mouseDrag(page: Page, box: { x: number; y: number }, from: { x: number; y: number }, to: { x: number; y: number }) {

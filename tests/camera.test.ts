@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { CAMERA_FOV, HOME_PHI, HOME_THETA, PHI_MAX, PHI_MIN, cameraBasis, cameraDistance, cameraEye, dragInCubeSpace, orbitBy, projectToScreen } from "../src/view/camera";
-import { resolveTurn } from "../src/view/drag";
 
 function facingPoint(theta: number, phi: number) {
   const eye = cameraEye(theta, phi, 1);
@@ -151,13 +150,5 @@ describe("camera projection", () => {
     expect(Math.abs(screenShift(front, { theta: HOME_THETA, phi: PHI_MIN }, 0, 80).y)).toBeLessThan(0.5);
     expect(orbitBy(HOME_THETA, PHI_MAX, 0, -80, 500, 500).phi).toBe(PHI_MAX);
     expect(Math.abs(screenShift(front, { theta: HOME_THETA, phi: PHI_MAX }, 0, -80).y)).toBeLessThan(0.5);
-  });
-
-  it("keeps a top-edge drag as U after the view turns", () => {
-    const theta = HOME_THETA - 0.7;
-    const phi = HOME_PHI;
-    const drag = dragInCubeSpace(-36, 4, theta, phi);
-    const up = cameraBasis(theta, phi).up;
-    expect(resolveTurn({ x: 0, y: 1, z: 1 }, { x: 0, y: 0, z: 1 }, drag, up, cameraBasis(theta, phi).forward).move).toBe("U");
   });
 });
