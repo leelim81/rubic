@@ -1,4 +1,4 @@
-import { type Face, type Vec, faceOffset, faceletsToString, solvedBytes, SLOTS } from "../cube/model";
+import { type Face, type Vec, faceOffset, SLOTS } from "../cube/model";
 
 /** The order a person turns a physical cube while copying colours. */
 export const PAINT_FACES: Face[] = ["F", "R", "B", "L", "U", "D"];
@@ -13,12 +13,12 @@ export interface FaceGuide {
 }
 
 export const PAINT_GUIDE: Record<Face, FaceGuide> = {
-  F: { title: "Front", turn: "Green faces you. Yellow stays on top." },
-  R: { title: "Right", turn: "Turn the cube to your left until orange faces you. Yellow stays on top." },
-  B: { title: "Back", turn: "Turn the cube to your left again until blue faces you." },
-  L: { title: "Left", turn: "Turn the cube to your left once more until red faces you." },
-  U: { title: "Up", turn: "Tip the top toward you until yellow faces you." },
-  D: { title: "Down", turn: "Tip the bottom toward you until white faces you." },
+  F: { title: "Front", turn: "Hold the cube with the green centre facing you and the yellow centre on top." },
+  R: { title: "Right", turn: "Turn the cube so the orange centre faces you. Keep the yellow centre on top." },
+  B: { title: "Back", turn: "Turn the cube so the blue centre faces you. Keep the yellow centre on top." },
+  L: { title: "Left", turn: "Turn the cube so the red centre faces you. Keep the yellow centre on top." },
+  U: { title: "Up", turn: "Tilt the cube toward you so the yellow centre faces you. The green centre sits on the bottom edge." },
+  D: { title: "Down", turn: "Tilt the cube toward you so the white centre faces you. The green centre sits on the top edge." },
 };
 
 /** Camera angles that show one face, tilted about 24° so the neighbouring faces stay visible. */
@@ -68,29 +68,10 @@ export function indexAt(pos: Vec, normal: Vec): number | null {
   return slot?.index ?? null;
 }
 
-const SOLVED_FACELETS = faceletsToString(solvedBytes());
-
-/**
- * Face to show when a colouring is illegal.
- * A sticker that is not the solved colour, of a colour that appears more than nine times, is the stray one.
- * A named piece such as UF points at its first face.
- */
-export function faceToInspect(facelets: string, issues: { pieces: string[] }[]): Face | null {
-  const counts: Record<string, number> = {};
-  for (const letter of facelets) counts[letter] = (counts[letter] ?? 0) + 1;
-  for (const face of PAINT_FACES) {
-    for (let row = 0; row < 3; row += 1) {
-      for (let col = 0; col < 3; col += 1) {
-        const index = faceletIndex(face, row, col);
-        if (isCentre(index)) continue;
-        const letter = facelets[index] ?? "";
-        if (letter !== SOLVED_FACELETS[index] && (counts[letter] ?? 0) > 9) return face;
-      }
-    }
+/** Short message for an illegal colouring. The painter then returns to the front face. */
+export function paintErrorMessage(issues: { code: string }[]): string {
+  if (issues.some((issue) => issue.code === "counts")) {
+    return "Some colours don't add up — each colour needs 9 stickers. Check and try again.";
   }
-  for (const piece of issues.flatMap((issue) => issue.pieces)) {
-    const letter = piece[0];
-    if (letter && "URFDLB".includes(letter)) return letter as Face;
-  }
-  return null;
+  return "This colouring isn't possible on a real cube. Check each face again.";
 }

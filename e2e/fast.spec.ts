@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { applyMoves, faceletsToString, invertAlg, solvedBytes } from "../src/cube/model";
 import { emptyLesson, withSolution } from "../src/state/lesson";
+import { markReady } from "./ready";
 
 const SOLVED = faceletsToString(solvedBytes());
 /** Thirty real moves. The inverse is a legal cube, and playing the sequence solves it. At 3× that is about 7.5s. */
@@ -13,6 +14,7 @@ test.beforeEach(async ({ page }) => {
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
+  await markReady(page);
   await page.goto("./");
   await page.getByText("No moves needed").waitFor();
   (page as unknown as { __errors: string[] }).__errors = errors;
