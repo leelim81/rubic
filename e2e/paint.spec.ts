@@ -86,7 +86,7 @@ test("paints a known cube on the 3D faces, then solves it", async ({ page }, tes
   }
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(target, { timeout: 20_000 });
-  await expect(page.getByTestId("lesson-step")).toHaveText(/· \d+\/\d+/);
+  await expect(page.getByTestId("lesson-step")).toHaveText(/Expert · Move \d+ of \d+/);
   await page.getByTestId("solve-fast").click();
   await expect(page.getByTestId("lesson-step")).toHaveText("Solved", { timeout: 30_000 });
 });

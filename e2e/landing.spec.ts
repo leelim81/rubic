@@ -54,7 +54,7 @@ test("an empty visit shows one button, and a saved cube comes back ready", async
 
   await page.locator("details.options-panel summary").click();
   await page.getByRole("button", { name: "Scramble" }).click();
-  await expect(page.getByTestId("lesson-step")).toHaveText(/· \d+\/\d+/, { timeout: 20_000 });
+  await expect(page.getByTestId("lesson-step")).toHaveText(/Expert · Move \d+ of \d+/, { timeout: 20_000 });
   const scrambled = await page.getByTestId("lesson-facelets").textContent();
   await page.reload();
   await expect(page.getByTestId("lesson-facelets")).toHaveText(scrambled ?? "");

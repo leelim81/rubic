@@ -11,6 +11,7 @@ import {
   stepBack,
   stepForward,
   upcoming,
+  solvingHeadline,
   withSolution,
 } from "../src/state/lesson";
 import type { Solution } from "../src/solver/beginner";
@@ -115,6 +116,11 @@ describe("lesson controls", () => {
     lesson = commitTurn(commitTurn(lesson, "R").lesson, "R").lesson;
     expect(lesson.cursor).toBe(0);
     expect(currentFacelets(lesson)).toBe(start);
+  });
+
+  it("labels the solver while a move remains", () => {
+    expect(solvingHeadline("expert", "Solve · 1/21", 3, 21)).toBe("Expert · Move 3 of 21");
+    expect(solvingHeadline("beginner", "White cross · 3/14", 3, 134)).toBe("Beginner · White cross · 3/14 · Move 3 of 134");
   });
 });
 
