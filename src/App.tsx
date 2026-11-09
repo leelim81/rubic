@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { COLORS, type ColorName, applyMoves, centerColor, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
 import { PAINT_FACES, PAINT_GUIDE, blankCount, blankMessage, blankPaint, faceAfterFailedDone, facePose, filledOnFace, faceletIndex, isCentre, paintErrorMessage } from "./view/paint";
 import { playPaintError } from "./view/paintSound";
+import { STICKER_MARK } from "./view/contrast";
 import { validateFaceletString } from "./cube/validate";
 import { solveInWorker, type SolveMethod } from "./solveClient";
 import {
@@ -495,7 +496,7 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
     <div className="paint-bar">
       <div className="palette paint-palette" role="group" aria-label="Paint colour">
         {COLORS.map((name) => (
-          <button key={name} type="button" data-colour={name} aria-pressed={color === name} aria-label={name} onClick={() => onColor(name)} />
+          <button key={name} type="button" data-colour={name} aria-pressed={color === name} aria-label={name} onClick={() => onColor(name)}>{STICKER_MARK[name]}</button>
         ))}
       </div>
       <div className="sr-only" role="group" aria-label={`${guide.title} stickers`}>

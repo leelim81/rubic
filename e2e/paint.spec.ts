@@ -6,6 +6,18 @@ import { paintSticker, waitForFace } from "./paint-click";
 const SOLVED = faceletsToString(solvedBytes());
 const NAMES: Record<string, string> = { w: "white", y: "yellow", r: "red", o: "orange", b: "blue", g: "green" };
 
+test("yellow and white centre letters are dark on the sticker", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  await page.goto("./");
+  await page.getByRole("button", { name: "Enter colours" }).click();
+  for (let step = 0; step < 4; step += 1) await page.getByRole("button", { name: "Next face" }).click();
+  await waitForFace(page, "U");
+  await page.screenshot({ path: `/opt/cursor/artifacts/letter-yellow-${testInfo.project.name}.png` });
+  await page.getByRole("button", { name: "Next face" }).click();
+  await waitForFace(page, "D");
+  await page.screenshot({ path: `/opt/cursor/artifacts/letter-white-${testInfo.project.name}.png` });
+});
+
 test("cancel leaves the cube alone", async ({ page }, testInfo) => {
   await page.goto("./");
   await page.getByRole("button", { name: "Enter colours" }).click();
