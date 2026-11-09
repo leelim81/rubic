@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyMoves, faceletsToString, solvedBytes } from "../src/cube/model";
-import { faceletIndex, faceOfIndex, facePose, indexAt, isCentre, PAINT_FACES, stickerPoint } from "../src/view/paint";
+import { faceToInspect, faceletIndex, faceOfIndex, facePose, indexAt, isCentre, PAINT_FACES, stickerPoint } from "../src/view/paint";
 
 describe("paint mapping", () => {
   it("maps every sticker on every paint face to the solver index", () => {
@@ -38,6 +38,19 @@ describe("paint mapping", () => {
       }
     }
     expect(painted.join("")).toBe(target);
+  });
+
+  it("sends an illegal colouring back to the face that holds the stray sticker", () => {
+    const cells = SOLVED_LETTERS().split("");
+    const index = faceletIndex("F", 0, 0);
+    cells[index] = "w";
+    const face = faceToInspect(cells.join(""), [{ pieces: ["white", "green"] }]);
+    expect(face).toBe("F");
+    const down = SOLVED_LETTERS().split("");
+    down[faceletIndex("D", 0, 2)] = "g";
+    expect(faceToInspect(down.join(""), [{ pieces: ["green", "white"] }])).toBe("D");
+    expect(faceToInspect(SOLVED_LETTERS(), [{ pieces: ["UF", "UR"] }])).toBe("U");
+    expect(faceToInspect(SOLVED_LETTERS(), [{ pieces: [] }])).toBeNull();
   });
 });
 

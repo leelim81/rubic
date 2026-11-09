@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { COLORS, type ColorName, type Face, applyMoves, centerColor, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
-import { PAINT_FACES, PAINT_GUIDE, facePose, isCentre } from "./view/paint";
+import { COLORS, type ColorName, applyMoves, centerColor, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
+import { PAINT_FACES, PAINT_GUIDE, facePose, faceToInspect, faceletIndex, isCentre } from "./view/paint";
 import { validateFaceletString } from "./cube/validate";
 import { solveInWorker, type SolveMethod } from "./solveClient";
 import {
@@ -270,7 +270,7 @@ export function App() {
     const verdict = validateFaceletString(paintCells);
     if (!verdict.ok) {
       setPaintError(verdict.issues.map((issue) => issue.message).join(" "));
-      const face = faceFromIssues(verdict.issues);
+      const face = faceToInspect(paintCells, verdict.issues);
       if (face) setPaintStep(PAINT_FACES.indexOf(face));
       return;
     }
@@ -325,8 +325,10 @@ export function App() {
           {mode === "paint" ? (
             <PaintControls
               step={paintStep}
+              cells={paintCells}
               color={paintColor}
               onColor={setPaintColor}
+              onPaint={paintSticker}
               onBack={() => { setPaintError(null); setPaintStep((value) => Math.max(0, value - 1)); }}
               onNext={() => { setPaintError(null); setPaintStep((value) => Math.min(PAINT_FACES.length - 1, value + 1)); }}
               onDone={finishPaint}
@@ -398,22 +400,44 @@ function PaintStatus({ step, error }: { step: number; error: string | null }) {
   );
 }
 
-function PaintControls({ step, color, onColor, onBack, onNext, onDone, onCancel }: {
+const STICKER_NAME: Record<string, string> = { w: "white", y: "yellow", r: "red", o: "orange", b: "blue", g: "green" };
+
+function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, onDone, onCancel }: {
   step: number;
+  cells: string;
   color: ColorName;
   onColor: (color: ColorName) => void;
+  onPaint: (index: number) => void;
   onBack: () => void;
   onNext: () => void;
   onDone: () => void;
   onCancel: () => void;
 }) {
   const last = step === PAINT_FACES.length - 1;
+  const face = PAINT_FACES[step] ?? "F";
+  const guide = PAINT_GUIDE[face];
   return (
     <div className="paint-bar">
       <div className="palette paint-palette" role="group" aria-label="Paint colour">
         {COLORS.map((name) => (
           <button key={name} type="button" data-colour={name} aria-pressed={color === name} aria-label={name} onClick={() => onColor(name)} />
         ))}
+      </div>
+      <div className="sr-only" role="group" aria-label={`${guide.title} stickers`}>
+        {[0, 1, 2].flatMap((row) => [0, 1, 2].map((col) => {
+          const index = faceletIndex(face, row, col);
+          const current = STICKER_NAME[cells[index] ?? ""] ?? "unknown";
+          const centre = isCentre(index);
+          return (
+            <button
+              key={index}
+              type="button"
+              disabled={centre}
+              onClick={() => onPaint(index)}
+              aria-label={centre ? `${guide.title} centre, ${current}, fixed` : `${guide.title} row ${row + 1} column ${col + 1}, ${current}`}
+            />
+          );
+        }))}
       </div>
       <div className="paint-nav">
         <button type="button" onClick={onBack} disabled={step === 0}>Back</button>
@@ -429,18 +453,6 @@ function PaintControls({ step, color, onColor, onBack, onNext, onDone, onCancel 
 function paintLabel(step: number): string {
   const face = PAINT_FACES[step] ?? "F";
   return `Painting the ${PAINT_GUIDE[face].title.toLowerCase()} face. ${PAINT_GUIDE[face].turn}`;
-}
-
-function faceFromIssues(issues: { pieces: string[] }[]): Face | null {
-  const byColour: Record<string, Face> = { yellow: "U", white: "D", green: "F", blue: "B", orange: "R", red: "L" };
-  for (const issue of issues) {
-    for (const piece of issue.pieces) {
-      if (byColour[piece]) return byColour[piece];
-      const letter = piece[0];
-      if (letter && "URFDLB".includes(letter)) return letter as Face;
-    }
-  }
-  return null;
 }
 
 function plainMove(move: string): string {

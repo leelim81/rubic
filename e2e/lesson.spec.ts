@@ -74,6 +74,7 @@ test("manual colours can reject an impossible cube", async ({ page }, testInfo) 
   for (let step = 0; step < 5; step += 1) await page.getByRole("button", { name: "Next face" }).click();
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("alert")).toContainText(/9 stickers/);
+  await expect(page.getByTestId("paint-face")).toHaveText(/Front · 1 of 6/);
 });
 
 test("manual entry of the solved cube returns without a scan button", async ({ page }) => {

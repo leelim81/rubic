@@ -257,21 +257,6 @@ main { display: block; max-width: 860px; margin: 0 auto; }
   pointer-events: none;
 }
 .review-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.8rem; }
-.net {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-template-areas:
-    ". U . ."
-    "L F R B"
-    ". D . .";
-  gap: 0.8rem;
-}
-.face-U { grid-area: U; }
-.face-L { grid-area: L; }
-.face-F { grid-area: F; }
-.face-R { grid-area: R; }
-.face-B { grid-area: B; }
-.face-D { grid-area: D; }
 .preview-stage { height: 280px; }
 footer { color: var(--muted); font-size: 0.92rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -297,13 +282,6 @@ footer { color: var(--muted); font-size: 0.92rem; }
   .restore-long { display: none; }
   .restore-short { display: inline; }
   main { padding-bottom: 1rem; }
-  .net {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      "U R"
-      "F D"
-      "L B";
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

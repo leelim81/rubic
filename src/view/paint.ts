@@ -1,4 +1,4 @@
-import { type Face, type Vec, faceOffset, SLOTS } from "../cube/model";
+import { type Face, type Vec, faceOffset, faceletsToString, solvedBytes, SLOTS } from "../cube/model";
 
 /** The order a person turns a physical cube while copying colours. */
 export const PAINT_FACES: Face[] = ["F", "R", "B", "L", "U", "D"];
@@ -66,4 +66,31 @@ export function stickerPoint(face: Face, row: number, col: number): Vec {
 export function indexAt(pos: Vec, normal: Vec): number | null {
   const slot = SLOTS.find((item) => item.pos.x === pos.x && item.pos.y === pos.y && item.pos.z === pos.z && item.normal.x === normal.x && item.normal.y === normal.y && item.normal.z === normal.z);
   return slot?.index ?? null;
+}
+
+const SOLVED_FACELETS = faceletsToString(solvedBytes());
+
+/**
+ * Face to show when a colouring is illegal.
+ * A sticker that is not the solved colour, of a colour that appears more than nine times, is the stray one.
+ * A named piece such as UF points at its first face.
+ */
+export function faceToInspect(facelets: string, issues: { pieces: string[] }[]): Face | null {
+  const counts: Record<string, number> = {};
+  for (const letter of facelets) counts[letter] = (counts[letter] ?? 0) + 1;
+  for (const face of PAINT_FACES) {
+    for (let row = 0; row < 3; row += 1) {
+      for (let col = 0; col < 3; col += 1) {
+        const index = faceletIndex(face, row, col);
+        if (isCentre(index)) continue;
+        const letter = facelets[index] ?? "";
+        if (letter !== SOLVED_FACELETS[index] && (counts[letter] ?? 0) > 9) return face;
+      }
+    }
+  }
+  for (const piece of issues.flatMap((issue) => issue.pieces)) {
+    const letter = piece[0];
+    if (letter && "URFDLB".includes(letter)) return letter as Face;
+  }
+  return null;
 }
