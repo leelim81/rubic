@@ -3,24 +3,7 @@ import { type ColorName, type Face, FACES, faceOffset, LETTER_COLOR, stringToFac
 import { BLANK, isCentre } from "./paint";
 import { SLOTS } from "../cube/model";
 import { cameraDistance, HOME_PHI, HOME_THETA, orbitBy, viewIsShifted } from "./camera";
-
-const STICKER: Record<ColorName, string> = {
-  white: "#f3f0e8",
-  yellow: "#f5d20f",
-  red: "#d7263d",
-  orange: "#f18f01",
-  blue: "#2f6fed",
-  green: "#1f9d55",
-};
-
-const LETTER: Record<ColorName, string> = {
-  white: "W",
-  yellow: "Y",
-  red: "R",
-  orange: "O",
-  blue: "B",
-  green: "G",
-};
+import { LABEL_HALO, LABEL_INK, STICKER_HEX, STICKER_MARK } from "./contrast";
 
 const MOVE_ANGLE: Record<string, { axis: "x" | "y" | "z"; layer: (value: number) => boolean; angle: number }> = {
   U: { axis: "y", layer: (value) => value === 1, angle: -Math.PI / 2 },
@@ -260,11 +243,20 @@ export class CubeScene {
         ? (["white", "yellow", "red", "orange", "blue", "green"] as const)[colors[slot.index]!]!
         : LETTER_COLOR[letter];
       if (!name) continue;
-      sticker.material.color.set(STICKER[name]);
-      if (!onCurrent) sticker.material.color.multiplyScalar(0.34);
-      sticker.material.emissive.set(STICKER[name]);
-      sticker.material.emissiveIntensity = highlighted ? 0.55 : onCurrent ? 0.22 : 0.04;
-      sticker.material.map = this.options.letters || highlighted ? this.texture(name, highlighted) : null;
+      const showLetter = this.options.letters || highlighted;
+      if (showLetter) {
+        sticker.material.color.set("#ffffff");
+        if (!onCurrent) sticker.material.color.multiplyScalar(0.45);
+        sticker.material.emissive.set("#000000");
+        sticker.material.emissiveIntensity = 0;
+        sticker.material.map = this.texture(name, highlighted);
+      } else {
+        sticker.material.color.set(STICKER_HEX[name]);
+        if (!onCurrent) sticker.material.color.multiplyScalar(0.34);
+        sticker.material.emissive.set(STICKER_HEX[name]);
+        sticker.material.emissiveIntensity = onCurrent ? 0.22 : 0.04;
+        sticker.material.map = null;
+      }
       sticker.material.needsUpdate = true;
     }
   }
@@ -298,19 +290,22 @@ export class CubeScene {
     canvas.height = 128;
     const context = canvas.getContext("2d");
     if (!context) return null;
-    context.clearRect(0, 0, 128, 128);
+    context.fillStyle = STICKER_HEX[color];
+    context.fillRect(0, 0, 128, 128);
     if (highlighted) {
-      context.strokeStyle = "#1a140c";
-      context.lineWidth = 10;
+      context.strokeStyle = LABEL_INK[color];
+      context.lineWidth = 8;
       context.strokeRect(8, 8, 112, 112);
     }
-    if (this.options.letters || highlighted) {
-      context.fillStyle = color === "white" || color === "yellow" ? "#241c12" : "#fffaf3";
-      context.font = "700 54px Outfit, sans-serif";
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillText(LETTER[color], 64, 68);
-    }
+    context.font = "700 64px Outfit, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.lineJoin = "round";
+    context.lineWidth = 8;
+    context.strokeStyle = LABEL_HALO[color];
+    context.strokeText(STICKER_MARK[color], 64, 70);
+    context.fillStyle = LABEL_INK[color];
+    context.fillText(STICKER_MARK[color], 64, 70);
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 4;
