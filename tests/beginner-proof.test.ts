@@ -148,7 +148,7 @@ describe("beginner method", () => {
   });
 
   for (const [from, to] of [[1, 500], [501, 1000], [1001, 1500], [1501, 2000]] as const) {
-  it(`solves random legal cubes ${from}–${to} without wasted moves`, () => {
+  it(`solves random legal cubes ${from}–${to} without wasted moves`, async () => {
     const count = to - from + 1;
     let rawTotal = 0;
     let optTotal = 0;
@@ -158,6 +158,7 @@ describe("beginner method", () => {
     const stageTotals = new Map<string, { sum: number; max: number; n: number }>();
     const started = performance.now();
     for (let seed = from; seed <= to; seed += 1) {
+      if ((seed - from) % 8 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
       const state = randomLegalState(mulberry32(seed));
       const facelets = faceletsToString(state);
       const raw = solveBeginnerRaw(facelets);
