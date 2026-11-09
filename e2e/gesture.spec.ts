@@ -32,8 +32,7 @@ test("rotate view follows the finger on screen and does not turn a face", async 
     [0, -42, "y", -1],
   ];
   for (const [dx, dy, axis, sign] of directions) {
-    const reset = page.getByRole("status").getByRole("button", { name: "Reset view" });
-    if (await reset.count()) await reset.click();
+    await canvas.evaluate((el) => (el as HTMLCanvasElement & { __rubicReset?: () => void }).__rubicReset?.());
     const spot = projectToScreen(FRONT_LETTER, box.width, box.height, HOME_THETA, HOME_PHI);
     const before = await letterNear(canvas, spot, 42);
     expect(before?.n ?? 0).toBeGreaterThan(8);
@@ -76,7 +75,7 @@ test("dragging the cube in rotate-view mode orbits and does not turn a layer", a
   const from = projectToScreen({ x: 0, y: 1, z: 1 }, box.width, box.height, HOME_THETA, HOME_PHI);
   await mouseDrag(page, box, from, { x: from.x + 80, y: from.y + 24 });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED);
-  await expect(page.getByRole("status").filter({ hasText: "The view has moved" })).toBeVisible();
+  await expect(page.getByText("The view has moved")).toHaveCount(0);
   expect(Buffer.compare(before, await canvas.screenshot())).not.toBe(0);
 });
 

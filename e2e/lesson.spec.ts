@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { paintSticker } from "./paint-click";
 
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
@@ -67,20 +68,18 @@ test("reset returns to the solved empty state", async ({ page }) => {
 
 test("manual colours can reject an impossible cube", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: "Enter colours" }).click();
-  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page.getByTestId("paint-face")).toHaveText(/Front · 1 of 6/);
   await page.getByRole("button", { name: "white", exact: true }).click();
-  const stickers = page.locator(".net .sticker");
-  await stickers.nth(0).click();
-  await page.getByRole("button", { name: "Use these colours" }).click();
-  await expect(page.getByText(/Every sticker needs a colour|9 stickers/)).toBeVisible();
-  if (testInfo.project.name === "desktop") {
-    await page.screenshot({ path: "/tmp/rubic-manual.png", fullPage: true });
-  }
+  await paintSticker(page, "F", 0, 0, testInfo);
+  for (let step = 0; step < 5; step += 1) await page.getByRole("button", { name: "Next face" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("alert")).toContainText(/9 stickers/);
 });
 
-test("manual entry of the solved net returns to the cube", async ({ page }) => {
+test("manual entry of the solved cube returns without a scan button", async ({ page }) => {
   await page.getByRole("button", { name: "Enter colours" }).click();
-  await page.getByRole("button", { name: "Use these colours" }).click();
+  for (let step = 0; step < 5; step += 1) await page.getByRole("button", { name: "Next face" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByText("No moves needed")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Scan" })).toHaveCount(0);
 });

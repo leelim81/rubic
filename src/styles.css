@@ -76,7 +76,7 @@ main { display: block; max-width: 860px; margin: 0 auto; }
 .stage-column { background: none; border: 0; box-shadow: none; padding: 0; }
 .hero { display: flex; justify-content: center; }
 .cube-frame {
-  width: min(70vh, 640px);
+  width: min(62vh, 580px);
   aspect-ratio: 1;
   margin-inline: auto;
   border-radius: 18px;
@@ -209,6 +209,20 @@ main { display: block; max-width: 860px; margin: 0 auto; }
   appearance: none;
 }
 .scrub input { background: transparent; padding: 0; border: 0; border-radius: 0; min-height: 32px; }
+.paint-bar { display: flex; flex-direction: column; gap: 0.55rem; margin-top: 0.7rem; }
+.paint-nav { display: flex; gap: 0.45rem; }
+.paint-nav button { flex: 1 1 0; min-height: 44px; }
+.paint-palette { margin: 0; }
+.paint-palette button {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border-width: 2px;
+}
+.paint-palette button[aria-pressed="true"] { outline: 3px solid #f6f1e7; outline-offset: 2px; }
 .palette { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.8rem 0; }
 .palette button[data-colour="white"] { background: var(--white); color: #241c12; }
 .palette button[data-colour="yellow"] { background: var(--yellow); color: #241c12; }
