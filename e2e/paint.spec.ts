@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { applyMoves, faceletsToString, solvedBytes } from "../src/cube/model";
-import { PAINT_FACES, facePose, faceletIndex, isCentre } from "../src/view/paint";
+import { PAINT_FACES, blankPaint, facePose, faceletIndex, isCentre } from "../src/view/paint";
 import { paintSticker, waitForFace } from "./paint-click";
 
 const SOLVED = faceletsToString(solvedBytes());
@@ -18,6 +18,27 @@ test("cancel leaves the cube alone", async ({ page }, testInfo) => {
   await expect(page.getByRole("button", { name: "Enter colours" })).toBeVisible();
 });
 
+test("a fresh entry is blank except the centres, and Done opens the first unfinished face", async ({ page }, testInfo) => {
+  await page.goto("./");
+  await page.getByRole("button", { name: "Enter colours" }).click();
+  await expect(page.getByTestId("paint-cells")).toHaveText(blankPaint());
+  await expect(page.getByTestId("paint-progress")).toHaveText("0/8 filled");
+  if (testInfo.project.name === "desktop") await page.screenshot({ path: "/opt/cursor/artifacts/paint-blank-front.png" });
+  else await page.screenshot({ path: "/opt/cursor/artifacts/paint-blank-front-mobile.png" });
+  await page.getByRole("button", { name: "green", exact: true }).click();
+  for (let row = 0; row < 3; row += 1) {
+    for (let col = 0; col < 3; col += 1) {
+      if (row === 1 && col === 1) continue;
+      await paintSticker(page, "F", row, col, testInfo);
+    }
+  }
+  await expect(page.getByTestId("paint-progress")).toHaveText("8/8 filled");
+  for (let step = 0; step < 5; step += 1) await page.getByRole("button", { name: "Next face" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("alert")).toHaveText("40 stickers still blank");
+  await expect(page.getByTestId("paint-face")).toHaveText(/Right · 2 of 6/);
+});
+
 test("a mistake on a later face returns to the front and keeps the paint", async ({ page }, testInfo) => {
   await page.goto("./");
   await page.getByRole("button", { name: "Enter colours" }).click();
@@ -27,7 +48,7 @@ test("a mistake on a later face returns to the front and keeps the paint", async
   await paintSticker(page, "R", 0, 0, testInfo);
   for (let step = 0; step < 4; step += 1) await page.getByRole("button", { name: "Next face" }).click();
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByRole("alert")).toContainText("each colour needs 9 stickers");
+  await expect(page.getByRole("alert")).toContainText("stickers still blank");
   await expect(page.getByTestId("paint-face")).toHaveText(/Front · 1 of 6/);
   await page.getByRole("button", { name: "Next face" }).click();
   await waitForFace(page, "R");
@@ -116,19 +137,20 @@ test("keyboard paints a sticker, and a drag does not", async ({ page }, testInfo
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await waitForFace(page, "F");
   await page.getByRole("button", { name: "red", exact: true }).click();
-  const sticker = page.getByRole("button", { name: "Front row 1 column 1, green" });
+  const sticker = page.getByRole("button", { name: "Front row 1 column 1, blank" });
   await sticker.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("button", { name: "Front row 1 column 1, red" })).toHaveCount(1);
   for (let step = 0; step < 5; step += 1) await page.getByRole("button", { name: "Next face" }).click();
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByRole("alert")).toContainText("each colour needs 9 stickers");
+  await expect(page.getByRole("alert")).toContainText("47 stickers still blank");
   await expect(page.getByTestId("paint-face")).toHaveText(/Front · 1 of 6/);
   await expect(page.getByRole("button", { name: "Front row 1 column 1, red" })).toHaveCount(1);
   expect(await page.evaluate(() => (window as unknown as { __errorTones?: number }).__errorTones ?? 0)).toBeGreaterThan(0);
   const shot = testInfo.project.name === "desktop" ? "/opt/cursor/artifacts/paint-error-desktop.png" : "/opt/cursor/artifacts/paint-error-mobile.png";
   await page.screenshot({ path: shot });
   await page.getByRole("button", { name: "Clear all" }).click();
-  await expect(page.getByRole("button", { name: "Front row 1 column 1, green" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Front row 1 column 1, blank" })).toHaveCount(1);
+  await expect(page.getByTestId("paint-progress")).toHaveText("0/8 filled");
   await expect(page.getByRole("alert")).toHaveCount(0);
 });

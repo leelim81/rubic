@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { type ColorName, type Face, FACES, faceOffset, stringToFacelets } from "../cube/model";
-import { isCentre } from "./paint";
+import { type ColorName, type Face, FACES, faceOffset, LETTER_COLOR, stringToFacelets } from "../cube/model";
+import { BLANK, isCentre } from "./paint";
 import { SLOTS } from "../cube/model";
 import { cameraDistance, HOME_PHI, HOME_THETA, orbitBy, viewIsShifted } from "./camera";
 
@@ -88,6 +88,7 @@ export class CubeScene {
   private options: CubeSceneOptions;
   private resizeObserver: ResizeObserver;
   private textures = new Map<string, THREE.CanvasTexture>();
+  private blankMap: THREE.CanvasTexture | null = null;
 
   constructor(private canvas: HTMLCanvasElement, options: CubeSceneOptions) {
     this.options = options;
@@ -201,6 +202,7 @@ export class CubeScene {
     this.canvas.removeEventListener("pointerup", this.onUp);
     this.canvas.removeEventListener("pointercancel", this.onCancel);
     this.textures.forEach((texture) => texture.dispose());
+    this.blankMap?.dispose();
     this.renderer.dispose();
   }
 
@@ -236,15 +238,28 @@ export class CubeScene {
 
   private paint(facelets: string) {
     if (facelets.length !== 54) return;
-    const colors = stringToFacelets(facelets);
+    const hasBlank = facelets.includes(BLANK);
+    const colors = hasBlank ? null : stringToFacelets(facelets);
     for (const slot of SLOTS) {
       const sticker = this.stickerAt(slot.pos, slot.normal);
       if (!sticker) continue;
       sticker.index = slot.index;
-      const name = (["white", "yellow", "red", "orange", "blue", "green"] as const)[colors[slot.index]!]!;
       const highlighted = this.highlight.has(slot.index);
       const painting = this.options.paintFace;
       const onCurrent = !painting || slot.face === painting;
+      const letter = facelets[slot.index] ?? "";
+      if (letter === BLANK) {
+        sticker.material.color.set(onCurrent ? "#ffffff" : "#5a554c");
+        sticker.material.emissive.set("#000000");
+        sticker.material.emissiveIntensity = 0;
+        sticker.material.map = this.blankTexture();
+        sticker.material.needsUpdate = true;
+        continue;
+      }
+      const name = colors
+        ? (["white", "yellow", "red", "orange", "blue", "green"] as const)[colors[slot.index]!]!
+        : LETTER_COLOR[letter];
+      if (!name) continue;
       sticker.material.color.set(STICKER[name]);
       if (!onCurrent) sticker.material.color.multiplyScalar(0.34);
       sticker.material.emissive.set(STICKER[name]);
@@ -252,6 +267,26 @@ export class CubeScene {
       sticker.material.map = this.options.letters || highlighted ? this.texture(name, highlighted) : null;
       sticker.material.needsUpdate = true;
     }
+  }
+
+  /** Mid-grey sticker with a dashed rim, so an empty square is not mistaken for white. */
+  private blankTexture() {
+    if (this.blankMap) return this.blankMap;
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.fillStyle = "#7a746a";
+    context.fillRect(0, 0, 128, 128);
+    context.strokeStyle = "#e7e0d4";
+    context.lineWidth = 6;
+    context.setLineDash([12, 8]);
+    context.strokeRect(16, 16, 96, 96);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    this.blankMap = texture;
+    return texture;
   }
 
   private texture(color: ColorName, highlighted: boolean) {

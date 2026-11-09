@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { COLORS, type ColorName, applyMoves, centerColor, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
-import { PAINT_FACES, PAINT_GUIDE, facePose, faceletIndex, isCentre, paintErrorMessage } from "./view/paint";
+import { PAINT_FACES, PAINT_GUIDE, blankCount, blankMessage, blankPaint, faceAfterFailedDone, facePose, filledOnFace, faceletIndex, isCentre, paintErrorMessage } from "./view/paint";
 import { playPaintError } from "./view/paintSound";
 import { validateFaceletString } from "./cube/validate";
 import { solveInWorker, type SolveMethod } from "./solveClient";
@@ -259,7 +259,7 @@ export function App() {
   }
 
   function startPaint() {
-    setPaintCells(entered ? facelets : SOLVED);
+    setPaintCells(entered ? facelets : blankPaint());
     setPaintColor("white");
     setPaintStep(0);
     setPaintError(null);
@@ -274,7 +274,7 @@ export function App() {
   }
 
   function clearPaint() {
-    setPaintCells(SOLVED);
+    setPaintCells(blankPaint());
     setPaintError(null);
     setPaintStep(0);
   }
@@ -295,20 +295,28 @@ export function App() {
     setPaintCells((current) => current.slice(0, index) + letter + current.slice(index + 1));
   }
 
+  function rejectPaint(message: string, face: "F" | "R" | "B" | "L" | "U" | "D") {
+    playPaintError();
+    setPaintError(message);
+    setPaintStep(Math.max(0, PAINT_FACES.indexOf(face)));
+    const pose = facePose(face);
+    cubeRef.current?.setPaintFace(face);
+    void cubeRef.current?.lookAt(pose.theta, pose.phi, 680);
+    if (!reduced) {
+      setShaking(true);
+      window.clearTimeout(shakeTimer.current);
+      shakeTimer.current = window.setTimeout(() => setShaking(false), 480);
+    }
+  }
+
   function finishPaint() {
+    if (blankCount(paintCells) > 0) {
+      rejectPaint(blankMessage(blankCount(paintCells)), faceAfterFailedDone(paintCells));
+      return;
+    }
     const verdict = validateFaceletString(paintCells);
     if (!verdict.ok) {
-      playPaintError();
-      setPaintError(paintErrorMessage(verdict.issues));
-      setPaintStep(0);
-      const pose = facePose("F");
-      cubeRef.current?.setPaintFace("F");
-      void cubeRef.current?.lookAt(pose.theta, pose.phi, 680);
-      if (!reduced) {
-        setShaking(true);
-        window.clearTimeout(shakeTimer.current);
-        shakeTimer.current = window.setTimeout(() => setShaking(false), 480);
-      }
+      rejectPaint(paintErrorMessage(verdict.issues), "F");
       return;
     }
     const cells = paintCells;
@@ -340,7 +348,7 @@ export function App() {
       </header>
       <main>
         <section className="stage-column" aria-labelledby="cube-title">
-          {mode === "paint" ? <PaintStatus step={paintStep} error={paintError} /> : entered ? (
+          {mode === "paint" ? <PaintStatus step={paintStep} cells={paintCells} error={paintError} /> : entered ? (
             <div className="status" aria-live="polite">
               <p id="cube-title" className="status-title" data-testid="lesson-step">{labels.step}</p>
               {moveLine ? <p className="move-line" data-testid="move-line">{moveLine}</p> : null}
@@ -365,6 +373,7 @@ export function App() {
             </div>
           </div>
           <p className="sr-only" data-testid="lesson-facelets">{facelets}</p>
+          {mode === "paint" ? <p className="sr-only" data-testid="paint-cells">{paintCells}</p> : null}
           {mode === "paint" ? (
             <PaintControls
               step={paintStep}
@@ -437,13 +446,14 @@ export function App() {
   );
 }
 
-function PaintStatus({ step, error }: { step: number; error: string | null }) {
+function PaintStatus({ step, cells, error }: { step: number; cells: string; error: string | null }) {
   const face = PAINT_FACES[step] ?? "F";
   const guide = PAINT_GUIDE[face];
   return (
     <div className="status" aria-live="polite">
       <p id="cube-title" className="status-title" data-testid="paint-face">{guide.title} · {step + 1} of {PAINT_FACES.length}</p>
       <p className="quiet">{guide.turn}</p>
+      <p className="quiet" data-testid="paint-progress">{filledOnFace(cells, face)}/8 filled</p>
       {error ? <p className="error" role="alert">{error}</p> : null}
     </div>
   );
@@ -476,7 +486,7 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
       <div className="sr-only" role="group" aria-label={`${guide.title} stickers`}>
         {[0, 1, 2].flatMap((row) => [0, 1, 2].map((col) => {
           const index = faceletIndex(face, row, col);
-          const current = STICKER_NAME[cells[index] ?? ""] ?? "unknown";
+          const current = cells[index] === "." ? "blank" : STICKER_NAME[cells[index] ?? ""] ?? "unknown";
           const centre = isCentre(index);
           return (
             <button

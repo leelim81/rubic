@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyMoves, faceletsToString, solvedBytes } from "../src/cube/model";
 import { projectToScreen } from "../src/view/camera";
-import { PAINT_FACES, PAINT_GUIDE, facePose, faceletIndex, faceOfIndex, indexAt, isCentre, paintErrorMessage, stickerPoint } from "../src/view/paint";
+import { BLANK, PAINT_FACES, PAINT_GUIDE, blankCount, blankMessage, blankPaint, faceAfterFailedDone, facePose, faceletIndex, faceOfIndex, filledOnFace, firstBlankFace, indexAt, isCentre, paintErrorMessage, stickerPoint } from "../src/view/paint";
 import { playPaintError } from "../src/view/paintSound";
 
 describe("paint mapping", () => {
@@ -63,6 +63,27 @@ describe("paint mapping", () => {
     const whiteFace = projectToScreen(stickerPoint("D", 1, 1), 400, 400, down.theta, down.phi);
     const greenAbove = projectToScreen(stickerPoint("F", 1, 1), 400, 400, down.theta, down.phi);
     expect(greenAbove.y).toBeLessThan(whiteFace.y - 8);
+  });
+
+  it("starts with six coloured centres and 48 blank stickers", () => {
+    const cells = blankPaint();
+    const solved = SOLVED_LETTERS();
+    expect(blankCount(cells)).toBe(48);
+    expect([...cells].filter((_, index) => isCentre(index)).join("")).toBe([...solved].filter((_, index) => isCentre(index)).join(""));
+    expect([...cells].every((letter, index) => (isCentre(index) ? letter === solved[index] : letter === BLANK))).toBe(true);
+    expect(filledOnFace(cells, "F")).toBe(0);
+    expect(firstBlankFace(cells)).toBe("F");
+    const frontFilled = cells.split("");
+    for (let index = faceletIndex("F", 0, 0); index < faceletIndex("F", 0, 0) + 9; index += 1) {
+      if (!isCentre(index)) frontFilled[index] = "g";
+    }
+    const paintedFront = frontFilled.join("");
+    expect(filledOnFace(paintedFront, "F")).toBe(8);
+    expect(firstBlankFace(paintedFront)).toBe("R");
+    expect(blankMessage(40)).toBe("40 stickers still blank");
+    expect(blankMessage(1)).toBe("1 sticker still blank");
+    expect(faceAfterFailedDone(paintedFront)).toBe("R");
+    expect(faceAfterFailedDone(solved)).toBe("F");
   });
 
   it("explains a bad colouring in one plain sentence", () => {
