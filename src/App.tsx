@@ -364,14 +364,6 @@ export function App() {
       </header>
       <main>
         <section className={mode === "paint" ? "stage-column is-paint" : entered ? "stage-column" : "stage-column is-empty"} aria-labelledby="cube-title">
-          {mode === "paint" ? <PaintStatus step={paintStep} cells={paintCells} error={paintError} /> : entered ? (
-            <div className="status" aria-live="polite">
-              <p id="cube-title" className="status-title" data-testid="lesson-step">{solving ? <><span className="mode-chip">{modeName}</span>{" · "}{headline.slice(modeName.length + 3)}</> : headline}</p>
-              {moveLine ? <p className="move-line" data-testid="move-line">{moveLine}</p> : null}
-            </div>
-          ) : (
-            <p id="cube-title" className="empty-prompt" data-testid="empty-prompt">Enter your cube's colours to get step-by-step help.</p>
-          )}
           <div className="hero">
             <div className={shaking ? "cube-frame is-shaking" : "cube-frame"}>
               <CubeView
@@ -388,6 +380,15 @@ export function App() {
               />
             </div>
           </div>
+          <div className="rail">
+          {mode === "paint" ? <PaintStatus step={paintStep} cells={paintCells} error={paintError} /> : entered ? (
+            <div className="status" aria-live="polite">
+              <p id="cube-title" className="status-title" data-testid="lesson-step">{solving ? <><span className="mode-chip">{modeName}</span>{" · "}{headline.slice(modeName.length + 3)}</> : headline}</p>
+              {moveLine ? <p className="move-line" data-testid="move-line">{moveLine}</p> : null}
+            </div>
+          ) : (
+            <p id="cube-title" className="empty-prompt" data-testid="empty-prompt">Enter your cube's colours to get step-by-step help.</p>
+          )}
           <p className="sr-only" data-testid="lesson-facelets">{facelets}</p>
           {mode === "paint" ? <p className="sr-only" data-testid="paint-cells">{paintCells}</p> : null}
           {mode === "paint" ? (
@@ -456,6 +457,7 @@ export function App() {
             <p className="quiet">R means the right face, not red. A letter alone is clockwise as you look at that face. 2 is a half turn. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the cube as it was when that run started.</p>
             <p className="quiet">Ordinary Western 3×3: white opposite yellow, red opposite orange, blue opposite green. Colours stay in this browser. Expert is a fast two-phase search. Beginner is the layer-by-layer lesson.</p>
           </Disclosure>}
+          </div>
         </section>
       </main>
     </div>
