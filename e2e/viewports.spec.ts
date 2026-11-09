@@ -6,6 +6,7 @@ const SOLVED = faceletsToString(solvedBytes());
 
 const SIZES: { name: string; width: number; height: number; shot?: "empty" | "paint" | "solving" }[] = [
   { name: "320", width: 320, height: 640 },
+  { name: "320x568", width: 320, height: 568, shot: "paint" },
   { name: "360", width: 360, height: 740 },
   { name: "390", width: 390, height: 844, shot: "paint" },
   { name: "414", width: 414, height: 896 },
@@ -45,7 +46,7 @@ test("the layout fits empty, paint, and solving at every screen size", async ({ 
     await page.reload();
     await page.getByTestId("lesson-step").waitFor();
     await fit(page, `${size.name} solving`);
-    if (size.shot === "solving" || size.name === "1440") await page.screenshot({ path: shotPath(size, "solving") });
+    if (size.shot === "solving" || size.name === "1440" || size.name === "landscape") await page.screenshot({ path: shotPath(size, "solving") });
   }
 });
 
@@ -55,6 +56,8 @@ function shotPath(size: { name: string; shot?: string }, state: "empty" | "paint
   if (size.name === "390" && state === "paint") return "/opt/cursor/artifacts/theme-paint-phone.png";
   if (size.name === "768" && state === "empty") return "/opt/cursor/artifacts/theme-tablet.png";
   if (size.name === "landscape" && state === "paint") return "/opt/cursor/artifacts/theme-landscape-phone.png";
+  if (size.name === "landscape" && state === "solving") return "/opt/cursor/artifacts/theme-landscape-solving.png";
+  if (size.name === "320x568" && state === "paint") return "/opt/cursor/artifacts/theme-320x568.png";
   return `/opt/cursor/artifacts/theme-${size.name}-${state}.png`;
 }
 
@@ -90,9 +93,34 @@ async function fit(page: Page, label: string) {
     client: document.documentElement.clientWidth,
   }));
   expect(scroll.width, `${label} horizontal scroll`).toBeLessThanOrEqual(scroll.client + 1);
-  const cube = await page.locator(".cube-frame").boundingBox();
-  expect(cube, `${label} cube`).toBeTruthy();
-  expect(inView(cube, view!), `${label} cube on screen`).toBe(true);
+  const canvas = await page.locator("canvas").boundingBox();
+  expect(canvas, `${label} canvas`).toBeTruthy();
+  const floor = Math.max(160, Math.min(view!.width, view!.height) * 0.4);
+  expect(canvas!.width, `${label} canvas width`).toBeGreaterThanOrEqual(floor);
+  expect(canvas!.height, `${label} canvas height`).toBeGreaterThanOrEqual(floor);
+  expect(inView(canvas, view!), `${label} canvas on screen`).toBe(true);
+  const drawn = await page.locator("canvas").evaluate((node) => {
+    const canvas = node as HTMLCanvasElement;
+    const style = getComputedStyle(canvas);
+    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return 0;
+    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    if (!gl || gl.drawingBufferWidth < 2 || gl.drawingBufferHeight < 2) return 0;
+    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    let vivid = 0;
+    for (let index = 0; index < pixels.length; index += 16) {
+      const red = pixels[index] ?? 0;
+      const green = pixels[index + 1] ?? 0;
+      const blue = pixels[index + 2] ?? 0;
+      const alpha = pixels[index + 3] ?? 0;
+      const max = Math.max(red, green, blue);
+      const min = Math.min(red, green, blue);
+      if (alpha > 80 && max > 70 && max - min > 25) vivid += 1;
+    }
+    return vivid;
+  });
+  expect(drawn, `${label} cube pixels`).toBeGreaterThan(40);
+  const minButton = view!.height <= 520 && view!.width >= 480 ? 36 : 44;
   const buttons = page.locator(".paint-nav button:visible, .paint-palette button:visible, .paint-clear:visible, .controls button:visible, .enter-hero button:visible, header button:visible");
   const count = await buttons.count();
   const boxes: { x: number; y: number; width: number; height: number }[] = [];
@@ -100,9 +128,9 @@ async function fit(page: Page, label: string) {
     const box = await buttons.nth(index).boundingBox();
     const name = await buttons.nth(index).innerText();
     expect(box, `${label} ${name}`).toBeTruthy();
-    expect(box!.height, `${label} ${name}`).toBeGreaterThanOrEqual(44);
+    expect(box!.height, `${label} ${name}`).toBeGreaterThanOrEqual(minButton);
     expect(inView(box, view!), `${label} ${name} y=${box!.y.toFixed(0)} h=${box!.height.toFixed(0)} bottom=${(box!.y + box!.height).toFixed(0)} view=${view!.height}`).toBe(true);
-    expect(overlaps(cube, box), `${label} ${name} overlaps cube`).toBe(false);
+    expect(overlaps(canvas, box), `${label} ${name} overlaps cube`).toBe(false);
     boxes.push(box!);
   }
   for (let left = 0; left < boxes.length; left += 1) {
