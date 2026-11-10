@@ -19,6 +19,7 @@ import {
 } from "../cube/five";
 import { COLORS, COLOR_LETTER, FACES, HOME_CENTER, colorIndex, type Face } from "../cube/model";
 import type { Solution, TeachingChunk } from "./beginner";
+import { solveShortCentres } from "./fiveCentres";
 import { solveCube } from "./twoPhase";
 
 export interface FiveStats {
@@ -28,15 +29,17 @@ export interface FiveStats {
 
 /**
  * Reduction solver: centres, then edge pairs, then the 3×3 two-phase search.
- * Move counts are not optimal. Gullicube's shorter search needs about a
- * gigabyte of memory and cross-origin isolation, which phones and GitHub
- * Pages do not reliably have, so this is the solver the site uses.
+ * Centres are built face by face (a free first face, then short insertions,
+ * then 8-move x-centre cycles). Several face orders are tried and the
+ * shortest is kept. Move counts are not optimal. Gullicube's shorter search
+ * needs about a gigabyte of memory and cross-origin isolation, which phones
+ * and GitHub Pages do not reliably have, so this is the solver the site uses.
  */
 export function solveFive(text: string, progress?: (message: string) => void): Solution {
   const state = fiveFromString(text);
   if (sameBytes(state, solvedFiveBytes())) return pack([]);
   progress?.("Solving centres");
-  const centers = placeCenters(state);
+  const centers = solveShortCentres(state);
   progress?.("Pairing edges");
   const edges = placeEdges(state);
   if (!FIVE_EDGES.every((edge) => edgePaired(state, edge))) {
@@ -52,7 +55,7 @@ export function solveFive(text: string, progress?: (message: string) => void): S
   } catch (error) {
     throw new Error(error instanceof Error ? error.message : "This colouring isn't possible on a real cube.");
   }
-  const moves = normalizeFive([...centers, ...edges, ...parity, ...tail]);
+  const moves = dropLoops(normalizeFive([...centers, ...edges, ...parity, ...tail]), fiveFromString(text));
   if (!sameBytes(applyFive(fiveFromString(text), moves), solvedFiveBytes())) {
     const paired = FIVE_EDGES.filter((edge) => edgePaired(state, edge)).length;
     throw new Error(`Unsolved after reduction (paired ${paired}/12, centres ${FACES.every((face) => fiveCentreSlots(face).every((slot) => state[slot] === colorIndex(HOME_CENTER[face])))}).`);
@@ -274,10 +277,6 @@ let cachedMacros: string[][] | null = null;
 
 function pairingMacros(): string[][] {
   if (cachedMacros) return cachedMacros;
-  const slices = FIVE_MOVES.filter((move) => {
-    const parsed = parseFiveMove(move);
-    return parsed.wide || parsed.depth === 2;
-  });
   const seen = new Set<string>();
   const found: string[][] = [];
   const consider = (sequence: string[]) => {
@@ -301,15 +300,6 @@ function pairingMacros(): string[][] {
     consider(sequence);
     consider(sequence.slice().reverse().map((move) => invertFiveMove(move)));
   }
-  for (const slice of slices) {
-    const back = invertFiveMove(slice);
-    for (const outer of OUTER) {
-      const undo = invertFiveMove(outer);
-      consider([slice, outer, back]);
-      consider([outer, slice, undo]);
-      consider([outer, slice, undo, back]);
-    }
-  }
   cachedMacros = found;
   return found;
 }
@@ -332,17 +322,16 @@ function placeEdges(state: Uint8Array): string[] {
   const failed = new Set<string>();
   for (let guard = 0; guard < 40; guard += 1) {
     if (FIVE_EDGES.every((edge) => edgePaired(state, edge))) return moves;
-    const job = nextEdge(state);
+    const job = nextEdge(state, failed);
     if (!job) break;
-    const path = bfsEdge(state, job.mid, job.wings[0], job.wings[1], pairedKeys(state), macros);
-    if (!path) {
+    const before = FIVE_EDGES.filter((edge) => edgePaired(state, edge)).length;
+    const loose = bfsEdge(state, job.mid, job.wings[0], job.wings[1], pairedKeys(state), macros, false);
+    const path = loose && improves(state, loose, before) ? loose : bfsEdge(state, job.mid, job.wings[0], job.wings[1], pairedKeys(state), macros, true);
+    if (!path || !improves(state, path, before)) {
       failed.add(colorKey(state, job.mid));
       continue;
     }
-    const before = FIVE_EDGES.filter((edge) => edgePaired(state, edge)).length;
     applyFiveInto(state, path);
-    const after = FIVE_EDGES.filter((edge) => edgePaired(state, edge)).length;
-    if (after < before) throw new Error(`Pairing path dropped ${before} to ${after}`);
     failed.clear();
     moves.push(...path);
   }
@@ -497,9 +486,10 @@ function boostPairs(state: Uint8Array, algorithms: string[][]): string[] | null 
   return null;
 }
 
-function nextEdge(state: Uint8Array): { mid: [number, number]; wings: [[number, number], [number, number]] } | null {
+function nextEdge(state: Uint8Array, skip?: Set<string>): { mid: [number, number]; wings: [[number, number], [number, number]] } | null {
   for (const edge of FIVE_EDGES) {
     if (edgePaired(state, edge)) continue;
+    if (skip?.has(colorKey(state, edge.mid))) continue;
     const want = new Map(edge.mid.map((index) => [fiveFaceOf(index), state[index]!] as const));
     if (new Set(want.values()).size !== 2) continue;
     const wings: [number, number][] = [];
@@ -518,8 +508,15 @@ function nextEdge(state: Uint8Array): { mid: [number, number]; wings: [[number, 
   return null;
 }
 
-function bfsEdge(state: Uint8Array, mid: [number, number], wingA: [number, number], wingB: [number, number], _paired: string[], macros: string[][]): string[] | null {
-  const protectedGroups = FIVE_EDGES.filter((edge) => edgePaired(state, edge) && colorKey(state, edge.mid) !== colorKey(state, mid)).map((edge) => [...edge.mid, ...edge.wings.flat()]);
+function improves(state: Uint8Array, moves: string[], before: number): boolean {
+  const next = applyFive(state, moves);
+  return FIVE_EDGES.filter((edge) => edgePaired(next, edge)).length > before;
+}
+
+function bfsEdge(state: Uint8Array, mid: [number, number], wingA: [number, number], wingB: [number, number], _paired: string[], macros: string[][], protect: boolean): string[] | null {
+  const protectedGroups = protect
+    ? FIVE_EDGES.filter((edge) => edgePaired(state, edge) && colorKey(state, edge.mid) !== colorKey(state, mid)).map((edge) => [...edge.mid, ...edge.wings.flat()])
+    : [];
   const start = [...mid, ...wingA, ...wingB, ...protectedGroups.flat()];
   const keyOf = (points: number[]) => points.slice(0, 6).join(",");
   const queue: number[][] = [start];
@@ -532,7 +529,7 @@ function bfsEdge(state: Uint8Array, mid: [number, number], wingA: [number, numbe
     for (let macroIndex = 0; macroIndex < macros.length; macroIndex += 1) {
       const macro = macros[macroIndex]!;
       const image = imageOf(macro);
-      let points = current.map((index) => image[index]!);
+      const points = current.map((index) => image[index]!);
       if (new Set(points.slice(0, 6)).size !== 6) continue;
       const outer = macro.length === 1 ? parseFiveMove(macro[0]!) : null;
       const safeOuter = !!outer && !outer.wide && outer.depth === 1;
@@ -906,6 +903,24 @@ function emitLayers(turn: LayerTurn): string[] {
   return moves;
 }
 
+function dropLoops(moves: string[], start: Uint8Array): string[] {
+  const kept: string[] = [];
+  const state = new Uint8Array(start);
+  const seen = new Map<string, number>([[fiveToString(state), 0]]);
+  for (const move of moves) {
+    kept.push(move);
+    applyFiveInto(state, [move]);
+    const key = fiveToString(state);
+    const earlier = seen.get(key);
+    if (earlier !== undefined) {
+      kept.length = earlier;
+      return dropLoops(kept, start);
+    }
+    seen.set(key, kept.length);
+  }
+  return kept;
+}
+
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   if (left.length !== right.length) return false;
   for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) return false;
@@ -938,6 +953,7 @@ export function fiveFaceletsSolved(text: string): boolean {
 }
 
 void [
+  placeCenters,
   searchOrbit,
   findDonor,
   bfsCenter,
