@@ -66,7 +66,8 @@ function rotate(x: number, y: number, z: number, face: string): [number, number,
   }
 }
 
-function layer(face: string, depth: 1 | 2): number {
+function layer(face: string, depth: 1 | 2 | 3): number {
+  if (depth === 3) return 0;
   const sign = face === "D" || face === "L" || face === "B" ? -1 : 1;
   return sign * (depth === 1 ? 2 : 1);
 }
@@ -77,11 +78,11 @@ function axis(face: string): "x" | "y" | "z" {
   return "z";
 }
 
-export function parseSimMove(move: string): { face: string; depth: 1 | 2; wide: boolean; quarters: number } {
+export function parseSimMove(move: string): { face: string; depth: 1 | 2 | 3; wide: boolean; quarters: number } {
   let rest = move;
-  let inner = false;
-  if (/^2[URFDLB]/.test(rest)) {
-    inner = true;
+  let depth: 1 | 2 | 3 = 1;
+  if (/^[23][URFDLB]/.test(rest)) {
+    depth = rest[0] === "3" ? 3 : 2;
     rest = rest.slice(1);
   }
   const face = rest[0] ?? "";
@@ -89,7 +90,7 @@ export function parseSimMove(move: string): { face: string; depth: 1 | 2; wide: 
   const wide = rest.startsWith("w");
   if (wide) rest = rest.slice(1);
   const quarters = rest === "" ? 1 : rest === "'" ? 3 : 2;
-  return { face, depth: inner ? 2 : 1, wide, quarters };
+  return { face, depth, wide, quarters };
 }
 
 function affected(sticker: SimSticker, move: ReturnType<typeof parseSimMove>): boolean {

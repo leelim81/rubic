@@ -1,3 +1,4 @@
+import { SolveStopped } from "./gullicube/client";
 import { solveFive } from "./solver/fiveSolve";
 import type { Solution } from "./solver/beginner";
 import { solveBeginner } from "./solver/beginner";
@@ -10,7 +11,7 @@ function solveNow(facelets: string, method: SolveMethod): Solution {
   return method === "expert" ? solveCube(facelets) : solveBeginner(facelets);
 }
 
-export function solveInWorker(facelets: string, method: SolveMethod = "expert", onProgress?: (message: string) => void): Promise<Solution> {
+export function solveInWorker(facelets: string, method: SolveMethod = "expert", onProgress?: (message: string) => void, signal?: AbortSignal): Promise<Solution> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
     try {
@@ -27,6 +28,17 @@ export function solveInWorker(facelets: string, method: SolveMethod = "expert", 
       worker.terminate();
       reject(new Error("The solution took too long to prepare."));
     }, facelets.length === 150 ? 60_000 : 8_000);
+    const stop = () => {
+      window.clearTimeout(timer);
+      signal?.removeEventListener("abort", stop);
+      worker.terminate();
+      reject(new SolveStopped());
+    };
+    if (signal?.aborted) {
+      stop();
+      return;
+    }
+    signal?.addEventListener("abort", stop);
     worker.onmessage = (event: MessageEvent<{ solution?: Solution; error?: string; progress?: string }>) => {
       if (event.data.progress) {
         onProgress?.(event.data.progress);

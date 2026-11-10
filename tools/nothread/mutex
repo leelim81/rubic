@@ -1,0 +1,22 @@
+/* Single-thread stand-in for std::mutex. See tools/nothread/thread. */
+#pragma once
+
+namespace std {
+
+class mutex {
+ public:
+  void lock() {}
+  void unlock() {}
+  bool try_lock() { return true; }
+};
+
+template <class Mutex>
+class lock_guard {
+ public:
+  explicit lock_guard(Mutex&) {}
+  ~lock_guard() = default;
+  lock_guard(const lock_guard&) = delete;
+  lock_guard& operator=(const lock_guard&) = delete;
+};
+
+}  // namespace std

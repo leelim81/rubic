@@ -1,0 +1,35 @@
+/* Single-thread stand-in for std::thread.
+ *
+ * Gullicube's work queues join every worker before anyone reads the result,
+ * so running each task inline is the same schedule as one hardware thread.
+ * This header is forced ahead of the standard library so the WebAssembly
+ * build does not need SharedArrayBuffer or pthreads.
+ */
+#pragma once
+
+#include <utility>
+
+namespace std {
+
+class thread {
+ public:
+  thread() noexcept = default;
+
+  template <class Function, class... Args>
+  explicit thread(Function&& function, Args&&... args) {
+    static_cast<Function&&>(function)(static_cast<Args&&>(args)...);
+  }
+
+  thread(const thread&) = delete;
+  thread& operator=(const thread&) = delete;
+  thread(thread&&) noexcept = default;
+  thread& operator=(thread&&) noexcept = default;
+  ~thread() = default;
+
+  void join() {}
+  void detach() {}
+  bool joinable() const noexcept { return false; }
+  static unsigned int hardware_concurrency() noexcept { return 1; }
+};
+
+}  // namespace std

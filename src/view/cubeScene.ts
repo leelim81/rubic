@@ -542,7 +542,7 @@ export class CubeScene {
       const sign = parsed.face === "D" || parsed.face === "L" || parsed.face === "B" ? -1 : 1;
       const outer = 2 * sign;
       const inner = sign;
-      const layers = parsed.wide ? [outer, inner] : [parsed.depth === 1 ? outer : inner];
+      const layers = parsed.wide ? [outer, inner] : [parsed.depth === 1 ? outer : parsed.depth === 2 ? inner : 0];
       const turns = parsed.quarters === 2 ? 2 : parsed.quarters === 3 ? 3 : 1;
       const base = MOVE_ANGLE[parsed.face];
       if (!base) return null;
