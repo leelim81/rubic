@@ -6,6 +6,10 @@ import { playPaintError } from "./view/paintSound";
 import { STICKER_MARK } from "./view/contrast";
 import { validateFaceletString } from "./cube/validate";
 import { solveInWorker, type SolveMethod } from "./solveClient";
+import { DECLINED_KEY, SolveStopped, gullicubeBlocked, rememberGullicubeFailure, retryGullicube, solveShorter, type WorkerLike } from "./gullicube/client";
+import { DownloadCancelled, cacheHasAll, downloadSolver, removeSolverCache, type SolverManifest } from "./gullicube/download";
+import { PROBE_BYTES, SOLVE_SECONDS, SOLVE_TIMEOUT_MS, deviceMemoryHint } from "./gullicube/probe";
+import { ShorterSolverBar, type SolverPhase } from "./view/ShorterSolverBar";
 import {
   advanceLesson,
   applyUserMove,
@@ -59,6 +63,18 @@ export function App() {
   const [method, setMethod] = useState<SolveMethod>(readMethod);
   const [size, setSize] = useState<3 | 5>(readSize);
   const [loadingNote, setLoadingNote] = useState("Preparing the solution… you can keep looking at the cube.");
+  const [solverPhase, setSolverPhase] = useState<SolverPhase>("idle");
+  const [solverProgress, setSolverProgress] = useState({ received: 0, total: 0 });
+  const [solverNote, setSolverNote] = useState<string | null>(null);
+  const [solverReason, setSolverReason] = useState<string | null>(null);
+  const [solverBlocked, setSolverBlocked] = useState(() => {
+    const storage = browserStorage();
+    return storage ? gullicubeBlocked(storage) : false;
+  });
+  const [downloadAttempt, setDownloadAttempt] = useState(0);
+  const prepareAbort = useRef<AbortController | null>(null);
+  const manifestRef = useRef<SolverManifest | null>(null);
+  const solverFiles = useRef<{ name: string; url: string; bytes: number }[]>([]);
   lessonRef.current = lesson;
   const facelets = currentFacelets(lesson);
   const nextMove = lesson.moves[lesson.cursor];
@@ -96,6 +112,72 @@ export function App() {
   }, [size, method]);
 
   useEffect(() => {
+    if (size !== 5) {
+      setSolverPhase("idle");
+      return;
+    }
+    const controller = new AbortController();
+    let gone = false;
+    void (async () => {
+      try {
+        const manifestUrl = new URL("gullicube/manifest.json", assetBase());
+        const response = await fetch(manifestUrl, { signal: controller.signal });
+        if (!response.ok) throw new Error("The shorter solver list could not be loaded.");
+        const manifest = await response.json() as SolverManifest;
+        if (gone) return;
+        manifestRef.current = manifest;
+        const folder = new URL("./", manifestUrl);
+        const files = manifest.files.map((file) => ({ name: file.name, bytes: file.bytes, url: new URL(file.name, folder).href }));
+        solverFiles.current = files;
+        const existing = await caches.keys();
+        await Promise.all(existing.filter((name) => name.startsWith("rubic-gullicube-") && name !== manifest.cache).map((name) => caches.delete(name)));
+        const cache = await caches.open(manifest.cache);
+        const store = {
+          match: (url: string) => cache.match(url),
+          put: (url: string, body: Response) => cache.put(url, body),
+          keys: async () => (await cache.keys()).map((key) => key.url),
+        };
+        const total = manifest.bytes;
+        if (await cacheHasAll(store, files.map((file) => file.url))) {
+          if (!gone) {
+            setSolverProgress({ received: total, total });
+            setSolverPhase("ready");
+          }
+          return;
+        }
+        if (browserStorage()?.getItem(DECLINED_KEY) === "1") {
+          if (!gone) {
+            setSolverProgress({ received: 0, total });
+            setSolverPhase("declined");
+          }
+          return;
+        }
+        if (!gone) setSolverPhase("downloading");
+        let reported = 0;
+        await downloadSolver({
+          files,
+          cache: store,
+          signal: controller.signal,
+          onProgress: (progress) => {
+            const now = Date.now();
+            if (progress.received < progress.total && now - reported < 200) return;
+            reported = now;
+            if (!gone) setSolverProgress(progress);
+          },
+        });
+        if (!gone) setSolverPhase("ready");
+      } catch (error) {
+        if (gone || controller.signal.aborted || error instanceof DownloadCancelled) return;
+        if (!gone) setSolverPhase("failed");
+      }
+    })();
+    return () => {
+      gone = true;
+      controller.abort();
+    };
+  }, [size, downloadAttempt]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && mode === "paint") {
         leavePaint();
@@ -130,16 +212,61 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      const solution = await solveInWorker(start, size === 5 ? "expert" : chosen, setLoadingNote);
+      const solution = await prepareSolution(start, chosen);
       setEntered(true);
       setLesson((current) => withSolution({ ...current, history: [] }, start, solution, notice));
       setCheckpoint(null);
       setMode("cube");
     } catch (caught) {
+      if (caught instanceof SolveStopped) return;
       setError(caught instanceof Error ? caught.message : "The solution could not be prepared.");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function prepareSolution(start: string, chosen: SolveMethod) {
+    if (start.length === 150 && start === solvedFiveString()) {
+      setLoadingNote("Preparing the solution… you can keep looking at the cube.");
+      return solveInWorker(start, "expert", setLoadingNote);
+    }
+    if (start.length === 150 && solverPhase === "ready" && !solverBlocked && solverFiles.current.length > 0) {
+      const controller = new AbortController();
+      prepareAbort.current = controller;
+      try {
+        const outcome = await solveShorter({
+          request: {
+            facelets: start,
+            probeBytes: PROBE_BYTES,
+            timeSec: SOLVE_SECONDS,
+            files: solverFiles.current,
+            deviceMemory: deviceMemoryHint(),
+          },
+          spawn: () => new Worker(new URL("./worker/gullicubeWorker.ts", import.meta.url), { type: "module" }) as unknown as WorkerLike,
+          timeoutMs: SOLVE_TIMEOUT_MS,
+          fallback: (text, progress) => solveInWorker(text, "expert", progress, controller.signal),
+          signal: controller.signal,
+          onProgress: setLoadingNote,
+          remember: () => {
+            const storage = browserStorage();
+            if (storage) rememberGullicubeFailure(storage);
+            setSolverBlocked(true);
+          },
+        });
+        if (outcome.note) {
+          setSolverNote(outcome.note);
+          setSolverReason(outcome.reason);
+        } else {
+          setSolverNote(null);
+          setSolverReason(null);
+        }
+        return outcome.solution;
+      } finally {
+        prepareAbort.current = null;
+      }
+    }
+    setLoadingNote("Preparing the solution… you can keep looking at the cube.");
+    return solveInWorker(start, start.length === 150 ? "expert" : chosen, setLoadingNote);
   }
 
   async function go(direction: 1 | -1) {
@@ -204,13 +331,15 @@ export function App() {
     await cubeRef.current?.animate(move, next);
     setLoading(true);
     try {
-      const solution = await solveInWorker(next, method);
+      const solution = await prepareSolution(next, method);
       setCheckpoint(null);
       setLesson((current) => endAnimation(branchFrom(current, next, solution, move, `${move} starts a new solution. ${invertMove(move)} returns to the previous one.`)));
     } catch (caught) {
       setLesson((current) => endAnimation(current));
-      setError(caught instanceof Error ? caught.message : "That turn could not be used.");
-      await cubeRef.current?.animate("", facelets);
+      if (!(caught instanceof SolveStopped)) {
+        setError(caught instanceof Error ? caught.message : "That turn could not be used.");
+        await cubeRef.current?.animate("", facelets);
+      }
     } finally {
       setLoading(false);
     }
@@ -260,6 +389,7 @@ export function App() {
   }
 
   function stopSolve() {
+    prepareAbort.current?.abort();
     if (!solvingRef.current) return;
     runToken.current += 1;
     solvingRef.current = false;
@@ -280,6 +410,35 @@ export function App() {
     lessonRef.current = restored;
     setLesson(restored);
     cubeRef.current?.show(currentFacelets(restored));
+  }
+
+  function cancelDownload() {
+    const storage = browserStorage();
+    if (storage) storage.setItem(DECLINED_KEY, "1");
+    setSolverPhase("declined");
+    setDownloadAttempt((value) => value + 1);
+  }
+
+  function requestDownload() {
+    const storage = browserStorage();
+    if (storage) storage.removeItem(DECLINED_KEY);
+    setDownloadAttempt((value) => value + 1);
+  }
+
+  function retryShorter() {
+    const storage = browserStorage();
+    if (storage) retryGullicube(storage);
+    setSolverBlocked(false);
+    setSolverNote(null);
+  }
+
+  async function removeCachedSolver() {
+    const name = manifestRef.current?.cache;
+    if (name) await removeSolverCache(name);
+    const storage = browserStorage();
+    if (storage) storage.setItem(DECLINED_KEY, "1");
+    setSolverPhase("declined");
+    setSolverProgress({ received: 0, total: solverProgress.total });
   }
 
   function chooseSize(next: 3 | 5) {
@@ -428,6 +587,16 @@ export function App() {
             </div>
           </div>
           <div className="rail">
+          {size === 5 ? (
+            <ShorterSolverBar
+              phase={solverPhase}
+              progress={solverProgress}
+              blocked={solverBlocked}
+              onCancel={cancelDownload}
+              onDownload={requestDownload}
+              onRetry={retryShorter}
+            />
+          ) : null}
           {mode === "paint" ? <PaintStatus step={paintStep} cells={paintCells} error={paintError} /> : entered ? (
             <div className="status" aria-live="polite">
               <p id="cube-title" className="status-title" data-testid="lesson-step">{solving ? <><span className="mode-chip">{modeName}</span>{" · "}{headline.slice(modeName.length + 3)}</> : headline}</p>
@@ -456,7 +625,7 @@ export function App() {
             <button type="button" className="back" onClick={() => void run(() => go(-1))} disabled={running || lesson.busy || loading || (lesson.cursor === 0 && lesson.history.length === 0 && !lesson.pending)}>Back</button>
             <button type="button" className="primary" onClick={() => void run(() => go(1))} disabled={running || lesson.busy || loading || (!nextMove && lesson.pending?.intent !== "do") || lesson.pending?.intent === "undo"}>Next{lesson.pending?.intent === "do" ? ` · ${lesson.pending.move}` : nextMove ? ` · ${nextMove}` : ""}</button>
             <button type="button" className="fast" data-testid="solve-fast" onClick={() => void solveFast()} disabled={running || lesson.busy || loading || !advanceLesson(lesson)}>Solve 3×</button>
-            <button type="button" className={running ? "stop" : "stop is-quiet"} data-testid="stop-solve" onClick={stopSolve} disabled={!running} aria-hidden={!running} tabIndex={running ? 0 : -1}>Stop</button>
+            <button type="button" className={running || loading ? "stop" : "stop is-quiet"} data-testid="stop-solve" onClick={stopSolve} disabled={!(running || loading)} aria-hidden={!(running || loading)} tabIndex={running || loading ? 0 : -1}>Stop</button>
             <button type="button" className={checkpoint ? "restore" : "restore is-quiet"} data-testid="restore-solve" onClick={restoreSolve} disabled={!checkpoint} aria-hidden={!checkpoint} tabIndex={checkpoint ? 0 : -1} aria-label="Restore before solve"><span className="restore-long">Restore before solve</span><span className="restore-short">Restore</span>            </button>
           </div>
           ) : (
@@ -467,7 +636,9 @@ export function App() {
           {gestureNote ? <p className="notice" role="status">{gestureNote}</p> : null}
           {lesson.notice ? <p className="notice" role="status">{lesson.notice}</p> : null}
           {error ? <p className="error" role="alert">{error}</p> : null}
+          {solverNote ? <p className="notice" data-testid="solver-note" data-reason={solverReason ?? ""} role="status">{solverNote}</p> : null}
           {loading ? <p className="quiet" role="status">{loadingNote}</p> : null}
+          {loading && size === 5 && !entered ? <button type="button" className="text-button" onClick={stopSolve}>Stop</button> : null}
           {entered && mode !== "paint" && reduced ? <p className="quiet">Reduced motion is on. Moves jump to the next state, and the move letter is still announced above.</p> : null}
           {entered && mode !== "paint" && <Disclosure className="options-panel" show="Options" hide="Hide options" controls="options-panel">
             <label className="speed-label">
@@ -510,8 +681,11 @@ export function App() {
             <p className="quiet">{facelets.length === 150 ? "Hold the yellow centre on top, the white centre on the bottom, and the green centre facing you. Right is orange." : holdLine(stringToFacelets(facelets))}</p>
             <p className="quiet">R means the right face, not red. A letter alone is clockwise as you look at that face. 2 is a half turn. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the cube as it was when that run started.</p>
             <p className="quiet">{size === 5
-              ? "5×5 is Expert only. Centres are solved first, then the edges, then the cube is reduced to a 3×3. The result is a correct solution, not a shortest one. White sits opposite yellow, red opposite orange, and blue opposite green."
+              ? "5×5 is Expert only. The shorter solver is Tomas Rokicki’s gullicube (MPL-2.0). If it is not downloaded, or this device cannot run it, centres are solved first, then the edges, then the cube is reduced to a 3×3. A solution is correct, not a claim that no shorter one exists. White sits opposite yellow, red opposite orange, and blue opposite green."
               : "Ordinary Western 3×3: white opposite yellow, red opposite orange, blue opposite green. Colours stay in this browser. Expert is a fast two-phase search. Beginner is the layer-by-layer lesson."}</p>
+            {size === 5 && solverPhase === "ready" ? (
+              <button type="button" onClick={() => void removeCachedSolver()}>Remove cached solver</button>
+            ) : null}
           </Disclosure>}
           </div>
         </section>
@@ -584,6 +758,19 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
       <button type="button" className="paint-clear" onClick={onClear}>Clear all</button>
     </div>
   );
+}
+
+function assetBase(): string {
+  const meta = import.meta as { env?: { BASE_URL?: string } };
+  return new URL(meta.env?.BASE_URL ?? "/rubic/", window.location.href).href;
+}
+
+function browserStorage(): Storage | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
 }
 
 function paintLabel(step: number): string {

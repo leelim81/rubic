@@ -53,16 +53,16 @@ describe("5×5 model", () => {
   it("matches the independent simulator on every move and a scramble", () => {
     const solved = solvedFiveString();
     const stickers = solvedSim();
-    for (const move of FIVE_MOVES) {
+    for (const move of [...FIVE_MOVES, "3U", "3U'", "3U2", "3R", "3F'", "3D2", "3L", "3B'"]) {
       expect(simString(applySim(stickers, [move])), move).toBe(applyFiveString(solved, [move]));
     }
     const scramble = randomFiveScramble(mulberry32(9), 30);
     expect(simString(applySim(stickers, scramble))).toBe(applyFiveString(solved, scramble));
   });
 
-  it("inverts every outer, wide, and inner turn", () => {
+  it("inverts every outer, wide, inner, and middle turn", () => {
     const solved = solvedFiveString();
-    for (const move of FIVE_MOVES) {
+    for (const move of [...FIVE_MOVES, "3U", "3R'", "3F2", "3D", "3L'", "3B2"]) {
       expect(applyFiveString(solved, [move, invertFiveMove(move)]), move).toBe(solved);
     }
   });

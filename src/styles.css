@@ -130,6 +130,7 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 .rail { display: contents; }
 .hero { display: flex; justify-content: center; align-items: center; position: relative; order: 2; flex: 1 1 auto; min-height: 0; container-type: size; }
@@ -365,6 +366,14 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
 .review-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.8rem; }
 .preview-stage { height: 280px; }
 footer { color: var(--muted); font-size: 0.92rem; }
+.solver-download { position: absolute; z-index: 4; left: 0; right: 0; top: 0; display: grid; gap: 4px; margin: 0; padding: 4px 8px; border: 1px solid var(--line); border-radius: 12px; background: rgba(11, 16, 32, 0.92); pointer-events: none; }
+.solver-download button { pointer-events: auto; }
+.solver-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.solver-download p { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.25; }
+.solver-warning { color: var(--text); }
+.solver-meter { height: 4px; border-radius: 999px; background: var(--bg-3); overflow: hidden; }
+.solver-meter span { display: block; height: 100%; background: var(--accent); }
+.solver-download button { min-height: 36px; padding: 4px 10px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .hold-diagram { width: min(100%, 320px); height: auto; color: #f6f1e7; }
 .hold-diagram text { fill: #f4f6fb; font-size: 13px; font-family: Inter, sans-serif; }
@@ -437,7 +446,7 @@ footer { color: var(--muted); font-size: 0.92rem; }
   .paint-bar { gap: 6px; }
   .paint-palette { gap: 4px; flex-wrap: nowrap; }
   .paint-palette button { flex: 0 0 36px; width: 36px; height: 36px; min-height: 36px; }
-  .paint-nav button, .paint-clear, .controls button { min-height: 36px; padding-inline: 8px; }
+  .paint-nav button, .paint-clear, .controls button, .solver-download button { min-height: 36px; padding-inline: 8px; }
   .enter-hero { margin-top: 0; }
   .enter-hero button { min-height: 44px; width: 100%; font-size: 1rem; }
   .mark { font-size: 1.05rem; }

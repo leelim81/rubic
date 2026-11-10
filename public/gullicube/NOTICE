@@ -1,0 +1,8 @@
+Gullicube 5×5 tables and the WebAssembly build in this directory are
+Tomas Rokicki's gullicube, used under the Mozilla Public License 2.0.
+See LICENSE-MPL-2.0.
+
+Source: https://github.com/rokicki/gullicube
+The single-thread browser build replaces <thread> and <mutex> with the
+headers in tools/nothread so the solver does not need SharedArrayBuffer.
+The C++ sources themselves are unchanged. Rebuild with tools/build-gullicube.sh.

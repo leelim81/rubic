@@ -4,7 +4,8 @@
  * Coordinates match the 3×3: +x right, +y up, +z front, grid −2…2.
  * A clockwise turn is the quarter turn you see when looking at that face.
  * U sends the front edge to the left. Wide turns (Uw) move the outer layer
- * and the slice beside it. 2U turns only that inner slice.
+ * and the slice beside it. 2U turns only that inner slice. 3U turns the
+ * middle slice, the layer through the fixed centres.
  *
  * Home hold is the same as the 3×3: yellow on top, white on the bottom,
  * green in front, blue at the back, orange on the right, red on the left.
@@ -103,17 +104,17 @@ function quarter(v: Vec, face: Face): Vec {
 
 export interface ParsedFive {
   face: Face;
-  /** 1 = outer layer only, 2 = inner slice only. Wide turns both. */
-  depth: 1 | 2;
+  /** 1 = outer layer, 2 = inner slice, 3 = middle slice. Wide turns outer and inner. */
+  depth: 1 | 2 | 3;
   wide: boolean;
   quarters: 1 | 2 | 3;
 }
 
 export function parseFiveMove(move: string): ParsedFive {
   let rest = move;
-  let inner = false;
-  if (/^2[URFDLB]/.test(rest)) {
-    inner = true;
+  let depth: 1 | 2 | 3 = 1;
+  if (/^[23][URFDLB]/.test(rest)) {
+    depth = rest[0] === "3" ? 3 : 2;
     rest = rest.slice(1);
   }
   const face = rest[0] ?? "";
@@ -121,10 +122,10 @@ export function parseFiveMove(move: string): ParsedFive {
   rest = rest.slice(1);
   const wide = rest.startsWith("w");
   if (wide) rest = rest.slice(1);
-  if (inner && wide) throw new Error(`Unknown 5×5 move “${move}”`);
+  if (depth !== 1 && wide) throw new Error(`Unknown 5×5 move “${move}”`);
   const quarters = rest === "" ? 1 : rest === "'" ? 3 : rest === "2" ? 2 : 0;
   if (!quarters) throw new Error(`Unknown 5×5 move “${move}”`);
-  return { face: face as Face, depth: inner ? 2 : 1, wide, quarters };
+  return { face: face as Face, depth, wide, quarters };
 }
 
 /** Inner slices are written 2U so they stay distinct from the half turn U2. */
@@ -132,6 +133,7 @@ export function formatFiveMove(move: ParsedFive): string {
   const suffix = move.quarters === 2 ? "2" : move.quarters === 3 ? "'" : "";
   if (move.wide) return `${move.face}w${suffix}`;
   if (move.depth === 2) return `2${move.face}${suffix}`;
+  if (move.depth === 3) return `3${move.face}${suffix}`;
   return `${move.face}${suffix}`;
 }
 
@@ -146,7 +148,8 @@ function axisOf(face: Face): "x" | "y" | "z" {
   return "z";
 }
 
-function layerCoord(face: Face, depth: 1 | 2): number {
+function layerCoord(face: Face, depth: 1 | 2 | 3): number {
+  if (depth === 3) return 0;
   const sign = face === "D" || face === "L" || face === "B" ? -1 : 1;
   return sign * (depth === 1 ? K : 1);
 }
@@ -195,9 +198,11 @@ function moveList(): string[] {
 
 export const FIVE_MOVES = moveList();
 
+const MIDDLE_MOVES = ["U", "D", "R", "L", "F", "B"].flatMap((face) => [`3${face}`, `3${face}'`, `3${face}2`]);
+
 const PERMS: Record<string, Uint8Array> = {};
 const DESTS: Record<string, Uint16Array> = {};
-for (const move of FIVE_MOVES) {
+for (const move of [...FIVE_MOVES, ...MIDDLE_MOVES]) {
   const perm = buildPerm(move);
   PERMS[move] = perm;
   const dest = new Uint16Array(FIVE_STICKERS);
@@ -339,16 +344,19 @@ export const FIVE_EDGES: FiveEdge[] = (() => {
 export function fiveMoveSpeech(move: string): string {
   const parsed = parseFiveMove(move);
   const face = { U: "Up", D: "Down", F: "Front", B: "Back", R: "Right", L: "Left" }[parsed.face];
-  const layer = parsed.wide ? "two layers" : parsed.depth === 2 ? "inner slice" : "outer face";
+  const layer = parsed.wide ? "two layers" : parsed.depth === 3 ? "middle slice" : parsed.depth === 2 ? "inner slice" : "outer face";
   const turn = parsed.quarters === 2 ? "half turn" : parsed.quarters === 3 ? "anticlockwise" : "clockwise";
   return `${face} ${layer}, ${turn}.`;
 }
 
 export function randomFiveScramble(random: () => number, length = 44): string[] {
+  // Middle-slice turns move the face centres. Scrambles stay on outer, wide,
+  // and inner turns so a typed cube can keep the centres where the faces are.
+  const turns = FIVE_MOVES.filter((move) => !move.startsWith("3"));
   const moves: string[] = [];
   let previous = "";
   while (moves.length < length) {
-    const move = FIVE_MOVES[Math.floor(random() * FIVE_MOVES.length)]!;
+    const move = turns[Math.floor(random() * turns.length)]!;
     const face = parseFiveMove(move).face;
     if (face === previous) continue;
     previous = face;

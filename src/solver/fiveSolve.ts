@@ -31,9 +31,8 @@ export interface FiveStats {
  * Reduction solver: centres, then edge pairs, then the 3×3 two-phase search.
  * Centres are built face by face (a free first face, then short insertions,
  * then 8-move x-centre cycles). Several face orders are tried and the
- * shortest is kept. Move counts are not optimal. Gullicube's shorter search
- * needs about a gigabyte of memory and cross-origin isolation, which phones
- * and GitHub Pages do not reliably have, so this is the solver the site uses.
+ * shortest is kept. Move counts are not optimal. This is the solver used when
+ * gullicube is not downloaded or this device cannot run it.
  */
 export function solveFive(text: string, progress?: (message: string) => void): Solution {
   const state = fiveFromString(text);
@@ -873,7 +872,7 @@ function asLayers(move: string): LayerTurn {
   const axis = parsed.face === "R" || parsed.face === "L" ? "x" : parsed.face === "U" || parsed.face === "D" ? "y" : "z";
   const negative = parsed.face === "D" || parsed.face === "L" || parsed.face === "B";
   const signed = negative ? (4 - parsed.quarters) % 4 : parsed.quarters;
-  const coords = parsed.wide ? [2, 1] : [parsed.depth === 1 ? 2 : 1];
+  const coords = parsed.wide ? [2, 1] : [parsed.depth === 1 ? 2 : parsed.depth === 2 ? 1 : 0];
   const quarters = [0, 0, 0, 0, 0];
   const sign = negative ? -1 : 1;
   for (const coord of coords) quarters[sign * coord + 2] = signed;
@@ -888,12 +887,14 @@ function emitLayers(turn: LayerTurn): string[] {
     const sign = negative ? -1 : 1;
     const outer = turn.quarters[sign * 2 + 2] ?? 0;
     const inner = turn.quarters[sign * 1 + 2] ?? 0;
+    const middle = turn.quarters[2] ?? 0;
     const outerClock = negative ? (4 - outer) % 4 : outer;
     const innerClock = negative ? (4 - inner) % 4 : inner;
-    const push = (depth: 1 | 2, wide: boolean, quarters: number) => {
+    const push = (depth: 1 | 2 | 3, wide: boolean, quarters: number) => {
       if (!quarters) return;
       moves.push(formatFiveMove({ face, depth, wide, quarters: quarters as 1 | 2 | 3 }));
     };
+    if (!negative && middle) push(3, false, middle);
     if (outerClock && outerClock === innerClock) push(1, true, outerClock);
     else {
       push(1, false, outerClock);

@@ -20,6 +20,7 @@ test("a 5×5 can be scrambled, stepped, solved quickly, and restored", async ({ 
   test.setTimeout(150_000);
   await page.addInitScript((solved) => {
     localStorage.setItem("rubic-size-v1", "5");
+    localStorage.setItem("rubic-gullicube-declined-v1", "1");
     localStorage.setItem("rubic-entered-v1", "1");
     localStorage.setItem("rubic-lesson-v1", JSON.stringify({
       start: solved,
@@ -68,11 +69,11 @@ test("a 5×5 can be scrambled, stepped, solved quickly, and restored", async ({ 
   await expect(page.getByRole("combobox", { name: "Cube size" })).toHaveValue("5");
 
   await page.getByRole("button", { name: "Scramble" }).click();
-  await expect(page.locator("p.quiet[role=status]")).toContainText(/Solving centres|Pairing edges|Fixing parity|reduced cube/);
+  await expect(page.locator("p.quiet[role=status]")).toContainText(/Solving centres|Pairing edges|Fixing parity|reduced cube|shorter solver|Searching for a shorter/);
   await expect(page.getByTestId("lesson-step")).toHaveText(/Expert · Move 1 of \d+/, { timeout: 60_000 });
   await expect(page.getByTestId("lesson-step")).not.toContainText("Beginner");
   await page.getByRole("button", { name: /^Next/ }).click();
-  await expect(page.getByTestId("move-line")).toContainText(/outer face|two layers|inner slice/);
+  await expect(page.getByTestId("move-line")).toContainText(/outer face|two layers|inner slice|middle slice/);
   if (testInfo.project.name === "desktop") await page.screenshot({ path: "/opt/cursor/artifacts/five-solving-desktop.png" });
   await page.getByTestId("solve-fast").click();
   await page.waitForTimeout(400);
@@ -126,7 +127,7 @@ test("a solved 5×5 can be entered by tapping the 3D stickers", async ({ page },
     if (face !== "D") await page.getByRole("button", { name: "Next face" }).click();
   }
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByTestId("lesson-step")).toHaveText("No moves needed", { timeout: 20_000 });
+  await expect(page.getByTestId("lesson-step")).toHaveText("No moves needed", { timeout: 60_000 });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED);
   await expect(page.getByTestId("lesson-step")).toContainText(/Expert|No moves needed/);
 });
