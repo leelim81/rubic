@@ -86,9 +86,19 @@ button:focus-visible, summary:focus-visible, a:focus-visible, input:focus-visibl
     max(12px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
 }
-.top, .panel-head, .row, .transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.top { justify-content: space-between; margin-bottom: 4px; min-height: 44px; }
-.mark { font-size: clamp(1.35rem, 2vw, 1.7rem); font-weight: 700; margin: 0; letter-spacing: -0.04em; }
+.top, .panel-head, .row, .transport { display: flex; gap: 8px; align-items: center; }
+.panel-head, .row, .transport { flex-wrap: wrap; }
+.top { justify-content: space-between; margin-bottom: 4px; min-height: 44px; flex-wrap: nowrap; min-width: 0; }
+.mark {
+  margin: 0;
+  min-width: 0;
+  font-size: clamp(1.05rem, 2.2vw, 1.45rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.mark-short { display: none; }
 .text-button { background: transparent; border-color: transparent; color: var(--muted); padding-inline: 0.4rem; font-weight: 600; }
 .tag, .quiet, .eyebrow { color: var(--muted); }
 .eyebrow { text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.75rem; margin: 0; }
@@ -362,8 +372,14 @@ footer { color: var(--muted); font-size: 0.92rem; }
 .progress { display: flex; flex-wrap: wrap; gap: 0.35rem 0.8rem; }
 .progress p:first-child { flex: 1 1 100%; }
 
+@media (max-width: 374px) {
+  .mark-full { display: none; }
+  .mark-short { display: inline; }
+  .mark { font-size: 1.05rem; }
+}
+
 @media (max-width: 420px) {
-  .mark { font-size: 1.15rem; }
+  .mark { font-size: 1rem; }
   .status-title { font-size: 0.95rem; }
   .status .quiet, .empty-prompt { font-size: 0.82rem; line-height: 1.3; }
   .paint-bar { gap: 6px; margin-top: 6px; }
