@@ -355,7 +355,10 @@ export function App() {
   return (
     <div className="app">
       <header className="top">
-        <p className="mark">Rubic</p>
+        <p className="mark" data-testid="brand">
+          <span className="mark-full">Physical Cube Solver</span>
+          <span className="mark-short" aria-hidden="true">Cube Solver</span>
+        </p>
         {entered && mode === "cube" ? (
           <nav aria-label="Primary">
             <button type="button" className="text-button" onClick={startPaint}>Edit colours</button>

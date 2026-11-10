@@ -120,6 +120,11 @@ async function fit(page: Page, label: string) {
     return vivid;
   });
   expect(drawn, `${label} cube pixels`).toBeGreaterThan(40);
+  const brand = await page.getByTestId("brand").boundingBox();
+  expect(brand, `${label} brand`).toBeTruthy();
+  expect(inView(brand, view!), `${label} brand on screen`).toBe(true);
+  expect(brand!.height, `${label} brand wraps`).toBeLessThan(34);
+  await expect(page.getByTestId("brand").locator("span:visible"), `${label} brand text`).toHaveText(view!.width >= 375 ? "Physical Cube Solver" : "Cube Solver");
   const minButton = view!.height <= 520 && view!.width >= 480 ? 36 : 44;
   const buttons = page.locator(".paint-nav button:visible, .paint-palette button:visible, .paint-clear:visible, .controls button:visible, .enter-hero button:visible, header button:visible");
   const count = await buttons.count();
@@ -131,6 +136,7 @@ async function fit(page: Page, label: string) {
     expect(box!.height, `${label} ${name}`).toBeGreaterThanOrEqual(minButton);
     expect(inView(box, view!), `${label} ${name} y=${box!.y.toFixed(0)} h=${box!.height.toFixed(0)} bottom=${(box!.y + box!.height).toFixed(0)} view=${view!.height}`).toBe(true);
     expect(overlaps(canvas, box), `${label} ${name} overlaps cube`).toBe(false);
+    expect(overlaps(brand, box), `${label} ${name} overlaps brand`).toBe(false);
     boxes.push(box!);
   }
   for (let left = 0; left < boxes.length; left += 1) {

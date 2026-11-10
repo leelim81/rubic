@@ -1,4 +1,4 @@
-# Rubic
+# Physical Cube Solver
 
 A 3×3 solver that runs as a static site at [https://leelim81.github.io/rubic/](https://leelim81.github.io/rubic/).
 
