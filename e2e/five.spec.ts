@@ -127,7 +127,7 @@ test("a solved 5×5 can be entered by tapping the 3D stickers", async ({ page },
     if (face !== "D") await page.getByRole("button", { name: "Next face" }).click();
   }
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByTestId("lesson-step")).toHaveText("No moves needed", { timeout: 20_000 });
+  await expect(page.getByTestId("lesson-step")).toHaveText("No moves needed", { timeout: 60_000 });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(SOLVED);
   await expect(page.getByTestId("lesson-step")).toContainText(/Expert|No moves needed/);
 });

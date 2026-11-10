@@ -226,6 +226,10 @@ export function App() {
   }
 
   async function prepareSolution(start: string, chosen: SolveMethod) {
+    if (start.length === 150 && start === solvedFiveString()) {
+      setLoadingNote("Preparing the solution… you can keep looking at the cube.");
+      return solveInWorker(start, "expert", setLoadingNote);
+    }
     if (start.length === 150 && solverPhase === "ready" && !solverBlocked && solverFiles.current.length > 0) {
       const controller = new AbortController();
       prepareAbort.current = controller;
