@@ -1,3 +1,4 @@
+import { solveFive } from "./solver/fiveSolve";
 import type { Solution } from "./solver/beginner";
 import { solveBeginner } from "./solver/beginner";
 import { solveCube } from "./solver/twoPhase";
@@ -5,10 +6,11 @@ import { solveCube } from "./solver/twoPhase";
 export type SolveMethod = "beginner" | "expert";
 
 function solveNow(facelets: string, method: SolveMethod): Solution {
+  if (facelets.length === 150) return solveFive(facelets);
   return method === "expert" ? solveCube(facelets) : solveBeginner(facelets);
 }
 
-export function solveInWorker(facelets: string, method: SolveMethod = "expert"): Promise<Solution> {
+export function solveInWorker(facelets: string, method: SolveMethod = "expert", onProgress?: (message: string) => void): Promise<Solution> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
     try {
@@ -24,8 +26,12 @@ export function solveInWorker(facelets: string, method: SolveMethod = "expert"):
     const timer = window.setTimeout(() => {
       worker.terminate();
       reject(new Error("The solution took too long to prepare."));
-    }, 8000);
-    worker.onmessage = (event: MessageEvent<{ solution?: Solution; error?: string }>) => {
+    }, facelets.length === 150 ? 60_000 : 8_000);
+    worker.onmessage = (event: MessageEvent<{ solution?: Solution; error?: string; progress?: string }>) => {
+      if (event.data.progress) {
+        onProgress?.(event.data.progress);
+        return;
+      }
       window.clearTimeout(timer);
       worker.terminate();
       if (event.data.error || !event.data.solution) reject(new Error(event.data.error ?? "The cube could not be solved."));

@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "A 3x3 Rubik's cube solver that runs as a static site.",
+  "description": "A 3x3 and 5x5 cube solver that runs as a static site.",
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",

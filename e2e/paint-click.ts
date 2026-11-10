@@ -11,17 +11,17 @@ export async function waitForFace(page: Page, face: Face) {
     const actual = canvas?.__rubicPose?.();
     if (!actual) return false;
     const delta = Math.atan2(Math.sin(actual.theta - expected.theta), Math.cos(actual.theta - expected.theta));
-    return Math.abs(delta) < 0.08 && Math.abs(actual.phi - expected.phi) < 0.08;
+    return Math.abs(delta) < 0.02 && Math.abs(actual.phi - expected.phi) < 0.02;
   }, pose);
 }
 
-export async function paintSticker(page: Page, face: Face, row: number, col: number, testInfo: TestInfo) {
+export async function paintSticker(page: Page, face: Face, row: number, col: number, testInfo: TestInfo, order: 3 | 5 = 3) {
   await waitForFace(page, face);
   const canvas = page.locator("canvas");
   const box = await canvas.boundingBox();
   if (!box) throw new Error("The cube is not on screen.");
   const pose = facePose(face);
-  const screen = projectToScreen(stickerPoint(face, row, col), box.width, box.height, pose.theta, pose.phi);
+  const screen = projectToScreen(stickerPoint(face, row, col, order), box.width, box.height, pose.theta, pose.phi);
   const x = box.x + screen.x;
   const y = box.y + screen.y;
   if (testInfo.project.name === "mobile") await page.touchscreen.tap(x, y);
