@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { applyFiveString, randomFiveScramble, solvedFiveString } from "../src/cube/five";
 import { mulberry32 } from "../src/cube/model";
+import { expectCardClear } from "./solver-card";
 
 const SOLVED = solvedFiveString();
 
@@ -16,7 +17,8 @@ test("5×5 shows download progress, the cancel warning, and a retry", async ({ p
   await expect(bar).toContainText(/MB · \d+%/);
   await expect(bar).toContainText(/about 320 instead of about 120[-–]170/);
   await expect(bar.getByRole("button", { name: "Cancel" })).toBeVisible();
-  if (testInfo.project.name === "mobile") await page.screenshot({ path: "/opt/cursor/artifacts/gulli-download-phone.png" });
+  await expectCardClear(page, "downloading");
+  if (testInfo.project.name === "mobile") await page.screenshot({ path: "/opt/cursor/artifacts/download-card-phone.png" });
   await bar.getByRole("button", { name: "Cancel" }).click();
   await expect(bar.getByRole("button", { name: "Download shorter solver" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Enter colours" })).toBeEnabled();
@@ -26,6 +28,7 @@ test("5×5 shows download progress, the cancel warning, and a retry", async ({ p
   await page.reload();
   await expect(page.getByTestId("solver-download")).toContainText("Shorter solver ready", { timeout: 15_000 });
   await expect(page.getByTestId("solver-download")).not.toContainText("Downloading");
+  await expectCardClear(page, "ready");
 });
 
 test("a network failure keeps the page usable and offers the download again", async ({ page }) => {
