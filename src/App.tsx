@@ -570,6 +570,16 @@ export function App() {
       </header>
       <main>
         <section className={mode === "paint" ? "stage-column is-paint" : entered ? "stage-column" : "stage-column is-empty"} aria-labelledby="cube-title">
+          {size === 5 ? (
+            <ShorterSolverBar
+              phase={solverPhase}
+              progress={solverProgress}
+              blocked={solverBlocked}
+              onCancel={cancelDownload}
+              onDownload={requestDownload}
+              onRetry={retryShorter}
+            />
+          ) : null}
           <div className="hero">
             <div className={shaking ? "cube-frame is-shaking" : "cube-frame"}>
               <CubeView
@@ -587,16 +597,6 @@ export function App() {
             </div>
           </div>
           <div className="rail">
-          {size === 5 ? (
-            <ShorterSolverBar
-              phase={solverPhase}
-              progress={solverProgress}
-              blocked={solverBlocked}
-              onCancel={cancelDownload}
-              onDownload={requestDownload}
-              onRetry={retryShorter}
-            />
-          ) : null}
           {mode === "paint" ? <PaintStatus step={paintStep} cells={paintCells} error={paintError} /> : entered ? (
             <div className="status" aria-live="polite">
               <p id="cube-title" className="status-title" data-testid="lesson-step">{solving ? <><span className="mode-chip">{modeName}</span>{" · "}{headline.slice(modeName.length + 3)}</> : headline}</p>

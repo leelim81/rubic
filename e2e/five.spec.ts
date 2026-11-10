@@ -4,6 +4,7 @@ import { applyFiveString, solvedFiveString } from "../src/cube/five";
 import { projectToScreen } from "../src/view/camera";
 import { PAINT_FACES, facePose, faceletIndex, stickerPoint } from "../src/view/paint";
 import { paintSticker } from "./paint-click";
+import { expectCardClear } from "./solver-card";
 
 const SOLVED = solvedFiveString();
 const FACE_COLOUR: Record<Face, string> = {
@@ -156,9 +157,11 @@ test("5×5 stays drawn from a narrow phone through a desktop, including landscap
     await page.reload();
     await page.getByLabel("Cube size").selectOption("5");
     await expect(page.getByRole("button", { name: "Enter colours" })).toBeVisible();
+    await expectCardClear(page, `${size.name} empty`);
     await drawn(page, `${size.name} empty`);
     await page.getByRole("button", { name: "Enter colours" }).click();
     await expect(page.getByTestId("paint-face")).toContainText("Front");
+    await expectCardClear(page, `${size.name} paint`);
     await drawn(page, `${size.name} paint`);
     if (size.name === "landscape") await page.screenshot({ path: "/opt/cursor/artifacts/five-landscape.png" });
     if (size.name === "320x568") await page.screenshot({ path: "/opt/cursor/artifacts/five-320x568.png" });
@@ -179,6 +182,7 @@ test("5×5 stays drawn from a narrow phone through a desktop, including landscap
     });
     await page.reload();
     await expect(page.getByTestId("lesson-step")).toContainText("Expert");
+    await expectCardClear(page, `${size.name} solving`);
     await drawn(page, `${size.name} solving`);
     if (size.name === "landscape") await page.screenshot({ path: "/opt/cursor/artifacts/five-landscape-solving.png" });
   }
