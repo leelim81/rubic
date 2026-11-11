@@ -1,6 +1,7 @@
 import { applyFourString } from "../cube/four";
 import { applyFiveString } from "../cube/five";
 import { applyMoves, faceletsToString, stringToFacelets } from "../cube/model";
+import { applyMegaString } from "../megaminx/model";
 import { applyMaster, applyMasterMoves } from "../pyraminx/master";
 import { applyPyra, applyPyraMoves } from "../pyraminx/model";
 import type { Solution, TeachingChunk } from "../solver/beginner";
@@ -56,6 +57,7 @@ export function currentFacelets(lesson: Lesson): string {
   if (lesson.start.length === 64) return applyMasterMoves(lesson.start, moves);
   if (lesson.start.length === 36) return applyPyraMoves(lesson.start, moves);
   if (lesson.start.length === 150) return applyFiveString(lesson.start, moves);
+  if (lesson.start.length === 132) return applyMegaString(lesson.start, moves);
   if (lesson.start.length === 96) return applyFourString(lesson.start, moves);
   return faceletsToString(applyMoves(stringToFacelets(lesson.start), moves));
 }
@@ -160,6 +162,10 @@ export function isQuarterOf(move: string, half: string): boolean {
 }
 
 export function invertMove(move: string): string {
+  if (move.endsWith("++")) return `${move.slice(0, -2)}--`;
+  if (move.endsWith("--")) return `${move.slice(0, -2)}++`;
+  if (move.endsWith("+")) return `${move.slice(0, -1)}-`;
+  if (move.endsWith("-")) return `${move.slice(0, -1)}+`;
   if (!move || move.endsWith("2")) return move;
   if (move.endsWith("'")) return move.slice(0, -1);
   return `${move}'`;
@@ -273,10 +279,11 @@ export function applyUserMove(facelets: string, move: string): string {
   if (facelets.length === 64) return applyMaster(facelets, move);
   if (facelets.length === 36) return applyPyra(facelets, move);
   if (facelets.length === 150) return applyFiveString(facelets, [move]);
+  if (facelets.length === 132) return applyMegaString(facelets, [move]);
   if (facelets.length === 96) return applyFourString(facelets, [move]);
   return faceletsToString(applyMoves(stringToFacelets(facelets), [move]));
 }
 
 export function sameBytes(left: string, right: string): boolean {
-  return left === right && (left.length === 54 || left.length === 96 || left.length === 150 || left.length === 36 || left.length === 64);
+  return left === right && (left.length === 54 || left.length === 96 || left.length === 132 || left.length === 150 || left.length === 36 || left.length === 64);
 }
