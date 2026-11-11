@@ -46,7 +46,7 @@ export interface CubeSceneOptions {
   onViewShift?: (shifted: boolean) => void;
   onGesture?: (message: string | null) => void;
   onPaint?: (index: number) => void;
-  paintFace?: Face | null;
+  paintFace?: string | null;
   /** Slow spin used on the empty landing, before a cube has been entered. */
   idle?: boolean;
   turnMs?: number;
@@ -285,7 +285,7 @@ export class CubeScene {
         sticker.material.color.set(onCurrent ? "#ffffff" : "#6a645c");
         sticker.material.map = this.texture(name, highlighted);
       } else {
-        sticker.material.color.set(STICKER_HEX[name]);
+        sticker.material.color.set(displaySwatch(name).hex);
         if (!onCurrent) sticker.material.color.multiplyScalar(0.55);
         sticker.material.map = null;
       }
@@ -593,7 +593,7 @@ export class CubeScene {
     this.frame = requestAnimationFrame(this.loop);
   };
 
-  setPaintFace(face: Face | null) {
+  setPaintFace(face: string | null) {
     this.options = { ...this.options, paintFace: face };
     if (this.facelets) this.paint(this.facelets);
   }

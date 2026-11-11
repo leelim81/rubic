@@ -437,6 +437,8 @@ html[data-palette="pastel"] .sticker[data-colour="sky"] { background-color: var(
 html[data-palette="pastel"] .sticker[data-colour="lime"] { background-color: var(--lime) !important; }
 html[data-palette="pastel"] .sticker[data-colour="cream"] { background-color: var(--cream) !important; }
 html[data-palette="pastel"] .sticker[data-colour="grey"] { background-color: var(--grey) !important; }
+.paint-palette.is-twelve { flex-wrap: wrap; }
+.paint-palette.is-twelve button { flex: 1 1 36px; width: auto; min-width: 36px; max-width: 52px; }
 .sticker-grid { display: grid; grid-template-columns: repeat(3, minmax(44px, 1fr)); gap: 6px; width: min(100%, 240px); }
 .sticker {
   aspect-ratio: 1;

@@ -18,7 +18,7 @@ test("Master Pyraminx is a puzzle option, and a painted scramble solves back", a
   test.setTimeout(240_000);
   await page.goto("./");
   const picker = page.getByLabel("Cube size");
-  await expect(picker.locator("option")).toHaveText(["3×3", "5×5", "Pyraminx", "Master Pyraminx"]);
+  await expect(picker.locator("option")).toHaveText(["3×3", "5×5", "Pyraminx", "Master Pyraminx", "Megaminx"]);
   await picker.selectOption("master");
   await expect(picker).toHaveValue("master");
   await expect(page.getByTestId("empty-prompt")).toHaveText("Enter your Master Pyraminx's colours to get step-by-step help.");
