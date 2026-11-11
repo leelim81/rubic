@@ -42,7 +42,7 @@ export interface CubeSceneOptions {
   onViewShift?: (shifted: boolean) => void;
   onGesture?: (message: string | null) => void;
   onPaint?: (index: number) => void;
-  paintFace?: Face | null;
+  paintFace?: string | null;
   /** Slow spin used on the empty landing, before a cube has been entered. */
   idle?: boolean;
   turnMs?: number;
@@ -433,7 +433,7 @@ export class CubeScene {
     this.frame = requestAnimationFrame(this.loop);
   };
 
-  setPaintFace(face: Face | null) {
+  setPaintFace(face: string | null) {
     this.options = { ...this.options, paintFace: face };
     if (this.facelets) this.paint(this.facelets);
   }

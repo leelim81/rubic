@@ -1,9 +1,15 @@
+import { solveMegaminx } from "../megaminx/solver";
 import { solveFive } from "../solver/fiveSolve";
 import { solveBeginner } from "../solver/beginner";
 import { solveCube } from "../solver/twoPhase";
 
 self.onmessage = (event: MessageEvent<{ facelets: string; method?: "beginner" | "expert" | "short" }>) => {
   try {
+    if (event.data.facelets.length === 132) {
+      const solution = solveMegaminx(event.data.facelets, (progress) => self.postMessage({ progress }));
+      self.postMessage({ solution });
+      return;
+    }
     if (event.data.facelets.length === 150) {
       const solution = solveFive(event.data.facelets, (progress) => self.postMessage({ progress }));
       self.postMessage({ solution });

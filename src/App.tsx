@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { applyFiveString, fiveMoveSpeech, randomFiveScramble, solvedFiveString, validateFive } from "./cube/five";
+import { MEGA_COLORS, applyMegaString, megaMoveSpeech, randomMegaScramble, solvedMegaString } from "./megaminx/model";
+import { MEGA_PAINT_ORDER, blankMegaPaint, filledOnMegaFace, firstBlankMegaFace, megaFacePose, megaGuide, megaPaintCount } from "./megaminx/paint";
+import { validateMega } from "./megaminx/validate";
 import { COLORS, type ColorName, applyMoves, centerColor, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
 import { PAINT_FACES, PAINT_GUIDE, blankCount, blankMessage, blankPaint, faceAfterFailedDone, facePose, filledOnFace, faceletIndex, isCentre, paintableOnFace, paintErrorMessage } from "./view/paint";
 import { playPaintError } from "./view/paintSound";
@@ -45,7 +48,7 @@ export function App() {
   const [letters, setLetters] = useState(true);
   const [mode, setMode] = useState<"cube" | "paint">("cube");
   const [paintCells, setPaintCells] = useState(SOLVED);
-  const [paintColor, setPaintColor] = useState<ColorName>("white");
+  const [paintColor, setPaintColor] = useState("white");
   const [paintStep, setPaintStep] = useState(0);
   const [paintError, setPaintError] = useState<string | null>(null);
   const [shaking, setShaking] = useState(false);
@@ -62,7 +65,7 @@ export function App() {
   const lessonRef = useRef(lesson);
   const [turnMs, setTurnMs] = useState(750);
   const [method, setMethod] = useState<SolveMethod>(readMethod);
-  const [size, setSize] = useState<3 | 5>(readSize);
+  const [size, setSize] = useState<3 | 5 | "mega">(readSize);
   const [loadingNote, setLoadingNote] = useState("Preparing the solution… you can keep looking at the cube.");
   const [solverPhase, setSolverPhase] = useState<SolverPhase>("idle");
   const [solverProgress, setSolverProgress] = useState({ received: 0, total: 0 });
@@ -109,7 +112,7 @@ export function App() {
     } catch {
       // The choice still applies for this visit.
     }
-    if (size === 5 && method !== "expert") setMethod("expert");
+    if (size !== 3 && method !== "expert") setMethod("expert");
   }, [size, method]);
 
   useEffect(() => {
@@ -442,9 +445,9 @@ export function App() {
     setSolverProgress({ received: 0, total: solverProgress.total });
   }
 
-  function chooseSize(next: 3 | 5) {
+  function chooseSize(next: 3 | 5 | "mega") {
     setSize(next);
-    if (next === 5) setMethod("expert");
+    if (next !== 3) setMethod("expert");
     setEntered(false);
     setCheckpoint(null);
     setError(null);
@@ -453,7 +456,7 @@ export function App() {
   }
 
   function startPaint() {
-    setPaintCells(entered ? facelets : blankPaint(size));
+    setPaintCells(entered ? facelets : size === "mega" ? blankMegaPaint() : blankPaint(size));
     setPaintColor("white");
     setPaintStep(0);
     setPaintError(null);
@@ -468,7 +471,7 @@ export function App() {
   }
 
   function clearPaint() {
-    setPaintCells(blankPaint(size));
+    setPaintCells(size === "mega" ? blankMegaPaint() : blankPaint(size));
     setPaintError(null);
     setPaintStep(0);
   }
@@ -483,6 +486,14 @@ export function App() {
   }
 
   function paintSticker(index: number) {
+    if (paintCells.length === 132) {
+      const face = MEGA_PAINT_ORDER[paintStep];
+      if (!face || index % 11 === 0 || Math.floor(index / 11) !== ["U", "L", "F", "R", "BR", "BL", "DR", "B", "DL", "FL", "FR", "D"].indexOf(face)) return;
+      const letter = MEGA_COLORS.find((color) => color.id === paintColor)?.letter;
+      if (!letter) return;
+      setPaintCells((current) => current.slice(0, index) + letter + current.slice(index + 1));
+      return;
+    }
     const face = PAINT_FACES[paintStep];
     const order: 3 | 5 = paintCells.length === 150 ? 5 : 3;
     const stride = order === 5 ? 25 : 9;
@@ -491,11 +502,12 @@ export function App() {
     setPaintCells((current) => current.slice(0, index) + letter + current.slice(index + 1));
   }
 
-  function rejectPaint(message: string, face: "F" | "R" | "B" | "L" | "U" | "D") {
+  function rejectPaint(message: string, face: string) {
     playPaintError();
     setPaintError(message);
-    setPaintStep(Math.max(0, PAINT_FACES.indexOf(face)));
-    const pose = facePose(face);
+    const mega = paintCells.length === 132;
+    setPaintStep(Math.max(0, (mega ? MEGA_PAINT_ORDER : PAINT_FACES).indexOf(face as "F")));
+    const pose = mega ? megaFacePose(face as "F") : facePose(face as "F");
     cubeRef.current?.setPaintFace(face);
     void cubeRef.current?.lookAt(pose.theta, pose.phi, 680);
     if (!reduced) {
@@ -508,6 +520,15 @@ export function App() {
   function finishPaint() {
     if (blankCount(paintCells) > 0) {
       rejectPaint(blankMessage(blankCount(paintCells)), faceAfterFailedDone(paintCells));
+      return;
+    }
+    if (paintCells.length === 132) {
+      const mega = validateMega(paintCells);
+      if (!mega.ok) {
+        rejectPaint(mega.issues[0]?.message ?? "This colouring is not a solvable megaminx.", firstBlankMegaFace(paintCells));
+        return;
+      }
+      void load(paintCells, "Solution started from the colours you entered.");
       return;
     }
     if (paintCells.length === 150) {
@@ -532,6 +553,13 @@ export function App() {
 
   useEffect(() => {
     if (mode !== "paint") return;
+    if (paintCells.length === 132) {
+      const face = MEGA_PAINT_ORDER[paintStep] ?? "F";
+      const pose = megaFacePose(face);
+      cubeRef.current?.setPaintFace(face);
+      void cubeRef.current?.lookAt(pose.theta, pose.phi, 680);
+      return;
+    }
     const face = PAINT_FACES[paintStep] ?? "F";
     const pose = facePose(face);
     cubeRef.current?.setPaintFace(face);
@@ -550,9 +578,10 @@ export function App() {
   const tools = mode !== "paint" ? (
     <div className="header-tools">
       {!entered ? (
-        <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(event.target.value === "5" ? 5 : 3)}>
+        <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(parsePuzzle(event.target.value))}>
           <option value={3}>3×3</option>
           <option value={5}>5×5</option>
+          <option value="mega">Megaminx</option>
         </select>
       ) : null}
       {entered && mode === "cube" ? (
@@ -585,7 +614,7 @@ export function App() {
                 facelets={mode === "paint" ? paintCells : facelets}
                 letters={letters}
                 gesture="view"
-                label={mode === "paint" ? paintLabel(paintStep) : cubeLabel(facelets, finished ? undefined : nextMove)}
+                label={mode === "paint" ? paintLabel(paintStep, paintCells.length) : cubeLabel(facelets, finished ? undefined : nextMove)}
                 onPaint={paintSticker}
                 paintFace={mode === "paint" ? PAINT_FACES[paintStep] ?? null : null}
                 idle={mode === "cube" && !entered}
@@ -613,7 +642,7 @@ export function App() {
               onColor={setPaintColor}
               onPaint={paintSticker}
               onBack={() => { setPaintError(null); setPaintStep((value) => Math.max(0, value - 1)); }}
-              onNext={() => { setPaintError(null); setPaintStep((value) => Math.min(PAINT_FACES.length - 1, value + 1)); }}
+              onNext={() => { setPaintError(null); setPaintStep((value) => Math.min((paintCells.length === 132 ? MEGA_PAINT_ORDER.length : PAINT_FACES.length) - 1, value + 1)); }}
               onDone={finishPaint}
               onClear={clearPaint}
               onCancel={() => leavePaint()}
@@ -636,12 +665,12 @@ export function App() {
           {error ? <p className="error" role="alert">{error}</p> : null}
           {solverNote ? <p className="notice" data-testid="solver-note" data-reason={solverReason ?? ""} role="status">{solverNote}</p> : null}
           {loading ? <p className="quiet" role="status">{loadingNote}</p> : null}
-          {loading && size === 5 && !entered ? <button type="button" className="text-button" onClick={stopSolve}>Stop</button> : null}
+          {loading && size !== 3 && !entered ? <button type="button" className="text-button" onClick={stopSolve}>Stop</button> : null}
           {entered && mode !== "paint" && reduced ? <p className="quiet">Reduced motion is on. Moves jump to the next state, and the move letter is still announced above.</p> : null}
           {entered && mode !== "paint" && <Disclosure className="options-panel" show="Options" hide="Hide options" controls="options-panel">
             <label className="speed-label">
               Solution
-              <select aria-label="Solution method" value={size === 5 ? "expert" : method} disabled={size === 5} onChange={(event) => {
+              <select aria-label="Solution method" value={size === 3 ? method : "expert"} disabled={size !== 3} onChange={(event) => {
                 const chosen = event.target.value === "beginner" ? "beginner" : "expert";
                 setMethod(chosen);
                 void load(facelets, null, chosen);
@@ -652,9 +681,10 @@ export function App() {
             </label>
             <label className="speed-label">
               Cube
-              <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(event.target.value === "5" ? 5 : 3)}>
+              <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(parsePuzzle(event.target.value))}>
                 <option value={3}>3×3</option>
                 <option value={5}>5×5</option>
+                <option value="mega">Megaminx</option>
               </select>
             </label>
             <label className="speed-label">
@@ -676,10 +706,14 @@ export function App() {
               <input type="checkbox" checked={letters} onChange={(event) => setLetters(event.target.checked)} />
               Letter stickers (W Y R O B G) as well as colour
             </label>
-            <p className="quiet">{facelets.length === 150 ? "Hold the yellow centre on top, the white centre on the bottom, and the green centre facing you. Right is orange." : holdLine(stringToFacelets(facelets))}</p>
-            <p className="quiet">R means the right face, not red. A letter alone is clockwise as you look at that face. 2 is a half turn. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the cube as it was when that run started.</p>
+            <p className="quiet">{holdText(facelets)}</p>
+            <p className="quiet">{size === "mega"
+              ? "R means the right face. A letter alone is 72° clockwise as you look at that face, and ' is 72° the other way. ++ is 144° clockwise and -- is 144° the other way. The same suffixes work on every face, including BR, BL and the lower faces. Solve 3× plays the remaining moves at three times the selected speed."
+              : "R means the right face, not red. A letter alone is clockwise as you look at that face. 2 is a half turn. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the cube as it was when that run started."}</p>
             <p className="quiet">{size === 5
               ? "5×5 is Expert only. The shorter solver is Tomas Rokicki’s gullicube (MPL-2.0). If it is not downloaded, or this device cannot run it, centres are solved first, then the edges, then the cube is reduced to a 3×3. A solution is correct, not a claim that no shorter one exists. White sits opposite yellow, red opposite orange, and blue opposite green."
+              : size === "mega"
+                ? "Megaminx is Expert only. White is opposite grey, red opposite orange, green opposite lime, yellow opposite cream, purple opposite pink, and blue opposite sky. Around white, clockwise from the front, the faces are green, purple, yellow, blue and red. A solution is correct, not a claim that no shorter one exists."
               : "Ordinary Western 3×3: white opposite yellow, red opposite orange, blue opposite green. Colours stay in this browser. Expert is a fast two-phase search. Beginner is the layer-by-layer lesson."}</p>
             {size === 5 && solverPhase === "ready" ? (
               <button type="button" onClick={() => void removeCachedSolver()}>Remove cached solver</button>
@@ -693,6 +727,18 @@ export function App() {
 }
 
 function PaintStatus({ step, cells, error }: { step: number; cells: string; error: string | null }) {
+  if (cells.length === 132) {
+    const face = MEGA_PAINT_ORDER[step] ?? "F";
+    const guide = megaGuide(face);
+    return (
+      <div className="status" aria-live="polite">
+        <p id="cube-title" className="status-title" data-testid="paint-face">{guide.title} · {step + 1} of {MEGA_PAINT_ORDER.length}</p>
+        <p className="quiet">{guide.turn}</p>
+        <p className="quiet" data-testid="paint-progress">{filledOnMegaFace(cells, face)}/{megaPaintCount()} filled</p>
+        {error ? <p className="error" role="alert">{error}</p> : null}
+      </div>
+    );
+  }
   const face = PAINT_FACES[step] ?? "F";
   const guide = PAINT_GUIDE[face];
   return (
@@ -710,8 +756,8 @@ const STICKER_NAME: Record<string, string> = { w: "white", y: "yellow", r: "red"
 function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, onDone, onClear, onCancel }: {
   step: number;
   cells: string;
-  color: ColorName;
-  onColor: (color: ColorName) => void;
+  color: string;
+  onColor: (color: string) => void;
   onPaint: (index: number) => void;
   onBack: () => void;
   onNext: () => void;
@@ -719,20 +765,27 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
   onClear: () => void;
   onCancel: () => void;
 }) {
-  const last = step === PAINT_FACES.length - 1;
-  const face = PAINT_FACES[step] ?? "F";
-  const guide = PAINT_GUIDE[face];
+  const mega = cells.length === 132;
+  const faces = mega ? MEGA_PAINT_ORDER : PAINT_FACES;
+  const last = step === faces.length - 1;
+  const face = faces[step] ?? "F";
+  const guide = mega ? megaGuide(face) : PAINT_GUIDE[face as "F"];
+  const palette = mega ? MEGA_COLORS.map((entry) => entry.id) : COLORS;
   return (
     <div className="paint-bar">
-      <div className="palette paint-palette" role="group" aria-label="Paint colour">
-        {COLORS.map((name) => (
-          <button key={name} type="button" data-colour={name} aria-pressed={color === name} aria-label={name} onClick={() => onColor(name)}>{STICKER_MARK[name]}</button>
+      <div className={mega ? "palette paint-palette is-twelve" : "palette paint-palette"} role="group" aria-label="Paint colour">
+        {palette.map((name) => (
+          <button key={name} type="button" data-colour={name} aria-pressed={color === name} aria-label={name} onClick={() => onColor(name)}>{mega ? MEGA_COLORS.find((entry) => entry.id === name)?.mark : STICKER_MARK[name as ColorName]}</button>
         ))}
       </div>
       <div className="sr-only" role="group" aria-label={`${guide.title} stickers`}>
-        {Array.from({ length: cells.length === 150 ? 5 : 3 }, (_, row) => row).flatMap((row) => Array.from({ length: cells.length === 150 ? 5 : 3 }, (_, col) => {
+        {mega ? MEGA_PAINT_ORDER.includes(face) ? Array.from({ length: 10 }, (_, local) => {
+          const index = ["U", "L", "F", "R", "BR", "BL", "DR", "B", "DL", "FL", "FR", "D"].indexOf(face) * 11 + local + 1;
+          const current = cells[index] === "." ? "blank" : cells[index];
+          return <button key={index} type="button" onClick={() => onPaint(index)} aria-label={`${guide.title} sticker ${local + 1}, ${current}`} />;
+        }) : null : Array.from({ length: cells.length === 150 ? 5 : 3 }, (_, row) => row).flatMap((row) => Array.from({ length: cells.length === 150 ? 5 : 3 }, (_, col) => {
           const order = cells.length === 150 ? 5 : 3;
-          const index = faceletIndex(face, row, col, order);
+          const index = faceletIndex(face as "F", row, col, order);
           const current = cells[index] === "." ? "blank" : STICKER_NAME[cells[index] ?? ""] ?? "unknown";
           const centre = isCentre(index, order);
           return (
@@ -771,12 +824,18 @@ function browserStorage(): Storage | null {
   }
 }
 
-function paintLabel(step: number): string {
+function paintLabel(step: number, count = 54): string {
+  if (count === 132) {
+    const face = MEGA_PAINT_ORDER[step] ?? "F";
+    const guide = megaGuide(face);
+    return `Painting the ${guide.title.toLowerCase()} face. ${guide.turn}`;
+  }
   const face = PAINT_FACES[step] ?? "F";
   return `Painting the ${PAINT_GUIDE[face].title.toLowerCase()} face. ${PAINT_GUIDE[face].turn}`;
 }
 
-function plainMove(move: string, cubeSize: 3 | 5 = 3): string {
+function plainMove(move: string, cubeSize: 3 | 5 | "mega" = 3): string {
+  if (cubeSize === "mega") return `${move}. ${megaMoveSpeech(move)}`;
   if (cubeSize === 5) return `${move}. ${fiveMoveSpeech(move)}`;
   if (move.endsWith("2")) {
     const face = move[0] ?? "";
@@ -789,14 +848,28 @@ function invert(move: string): string {
   return invertMove(move);
 }
 
-function applyScramble(cubeSize: 3 | 5): string {
+function applyScramble(cubeSize: 3 | 5 | "mega"): string {
   const seed = Math.floor(Math.random() * 1_000_000_000);
+  if (cubeSize === "mega") return applyMegaString(solvedMegaString(), randomMegaScramble(mulberry32(seed), 20));
   if (cubeSize === 5) return applyFiveString(solvedFiveString(), randomFiveScramble(mulberry32(seed), 40));
   return faceletsToString(applyMoves(solvedBytes(), randomScramble(mulberry32(seed), 22)));
 }
 
-function solvedFor(cubeSize: 3 | 5): string {
+function solvedFor(cubeSize: 3 | 5 | "mega"): string {
+  if (cubeSize === "mega") return solvedMegaString();
   return cubeSize === 5 ? solvedFiveString() : faceletsToString(solvedBytes());
+}
+
+function parsePuzzle(value: string): 3 | 5 | "mega" {
+  if (value === "5") return 5;
+  if (value === "mega") return "mega";
+  return 3;
+}
+
+function holdText(facelets: string): string {
+  if (facelets.length === 132) return "Hold the white centre on top, the grey centre on the bottom, and the green centre facing you. Right is red.";
+  if (facelets.length === 150) return "Hold the yellow centre on top, the white centre on the bottom, and the green centre facing you. Right is orange.";
+  return holdLine(stringToFacelets(facelets));
 }
 
 function holdLine(state: ReturnType<typeof stringToFacelets>): string {
@@ -804,11 +877,9 @@ function holdLine(state: ReturnType<typeof stringToFacelets>): string {
 }
 
 function cubeLabel(facelets: string, move: string | undefined): string {
-  if (facelets.length === 150) {
-    const line = "Hold the yellow centre on top, the white centre on the bottom, and the green centre facing you. Right is orange.";
-    return move ? `Cube. Next move ${move}. ${line}` : `Cube. ${line}`;
-  }
-  return move ? `Cube. Next move ${move}. ${holdLine(stringToFacelets(facelets))}` : `Cube. ${holdLine(stringToFacelets(facelets))}`;
+  const line = holdText(facelets);
+  const name = facelets.length === 132 ? "Megaminx" : "Cube";
+  return move ? `${name}. Next move ${move}. ${line}` : `${name}. ${line}`;
 }
 
 function readMethod(): SolveMethod {
@@ -827,9 +898,12 @@ function readEntered(): boolean {
   }
 }
 
-function readSize(): 3 | 5 {
+function readSize(): 3 | 5 | "mega" {
   try {
-    return localStorage.getItem(SIZE_KEY) === "5" ? 5 : 3;
+    const saved = localStorage.getItem(SIZE_KEY);
+    if (saved === "5") return 5;
+    if (saved === "mega") return "mega";
+    return 3;
   } catch {
     return 3;
   }

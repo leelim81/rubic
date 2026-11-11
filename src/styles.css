@@ -354,6 +354,14 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
 .palette button[data-colour="orange"] { background: var(--orange); color: #000000; text-shadow: 0 0 2px #ffffff; }
 .palette button[data-colour="blue"] { background: var(--blue); color: #ffffff; text-shadow: 0 0 2px #000000; }
 .palette button[data-colour="green"] { background: var(--green); color: #000000; text-shadow: 0 0 2px #ffffff; }
+.palette button[data-colour="purple"] { background: #6d35d4; color: #ffffff; text-shadow: 0 0 2px #1a0838; }
+.palette button[data-colour="pink"] { background: #e45aa0; color: #2a0618; text-shadow: 0 0 2px #ffffff; }
+.palette button[data-colour="lime"] { background: #b6e034; color: #172000; text-shadow: 0 0 2px #ffffff; }
+.palette button[data-colour="sky"] { background: #49c2f2; color: #06202c; text-shadow: 0 0 2px #ffffff; }
+.palette button[data-colour="cream"] { background: #e6c56e; color: #241800; text-shadow: 0 0 2px #ffffff; }
+.palette button[data-colour="grey"] { background: #8b90a0; color: #12141c; text-shadow: 0 0 2px #ffffff; }
+.paint-palette.is-twelve { flex-wrap: wrap; }
+.paint-palette.is-twelve button { flex: 1 1 36px; width: auto; min-width: 36px; max-width: 52px; }
 .sticker-grid { display: grid; grid-template-columns: repeat(3, minmax(44px, 1fr)); gap: 6px; width: min(100%, 240px); }
 .sticker {
   aspect-ratio: 1;

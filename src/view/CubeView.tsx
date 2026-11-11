@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import type { Face } from "../cube/model";
+import { MegaminxScene } from "../megaminx/scene";
 import { CubeScene, type CubeGesture } from "./cubeScene";
 
 export interface CubeHandle {
@@ -7,7 +7,7 @@ export interface CubeHandle {
   show: (facelets: string) => void;
   cancel: () => void;
   resetView: () => void;
-  setPaintFace: (face: Face | null) => void;
+  setPaintFace: (face: string | null) => void;
   lookAt: (theta: number, phi: number, durationMs?: number) => Promise<void>;
 }
 
@@ -21,9 +21,17 @@ interface Props {
   onViewShift?: (shifted: boolean) => void;
   onGesture?: (message: string | null) => void;
   onPaint?: (index: number) => void;
-  paintFace?: Face | null;
+  paintFace?: string | null;
   idle?: boolean;
   turnMs?: number;
+}
+
+function sceneKind(facelets: string): "cube" | "mega" {
+  return facelets.length === 132 ? "mega" : "cube";
+}
+
+function createScene(canvas: HTMLCanvasElement, facelets: string, options: ConstructorParameters<typeof CubeScene>[1]) {
+  return sceneKind(facelets) === "mega" ? new MegaminxScene(canvas, options) : new CubeScene(canvas, options);
 }
 
 export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
@@ -31,13 +39,14 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sceneRef = useRef<CubeScene | null>(null);
+  const sceneRef = useRef<CubeScene | MegaminxScene | null>(null);
+  const kindRef = useRef(sceneKind(facelets));
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const scene = new CubeScene(canvas, { reducedMotion: reduced, letters, gesture, onTurn, onViewShift, onGesture, onPaint, paintFace, idle, turnMs });
+    const scene = createScene(canvas, facelets, { reducedMotion: reduced, letters, gesture, onTurn, onViewShift, onGesture, onPaint, paintFace, idle, turnMs });
     sceneRef.current = scene;
     scene.setFacelets(facelets);
     scene.setHighlight(highlight);
@@ -54,8 +63,26 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
   }, [letters, gesture, reduced, onTurn, onViewShift, onGesture, onPaint, paintFace, idle, turnMs]);
 
   useEffect(() => {
+    const nextKind = sceneKind(facelets);
+    if (kindRef.current !== nextKind && canvasRef.current) {
+      sceneRef.current?.dispose();
+      const scene = createScene(canvasRef.current, facelets, {
+        reducedMotion: reduced,
+        letters,
+        gesture,
+        onTurn,
+        onViewShift,
+        onGesture,
+        onPaint,
+        paintFace,
+        idle,
+        turnMs,
+      });
+      sceneRef.current = scene;
+      kindRef.current = nextKind;
+    }
     sceneRef.current?.setFacelets(facelets);
-  }, [facelets]);
+  }, [facelets, letters, gesture, reduced, onTurn, onViewShift, onGesture, onPaint, paintFace, idle, turnMs]);
 
   useEffect(() => {
     sceneRef.current?.setHighlight(highlight);
@@ -70,7 +97,7 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView(
     show: (next: string) => sceneRef.current?.setFacelets(next),
     cancel: () => sceneRef.current?.cancelAnimation(),
     resetView: () => sceneRef.current?.resetView(),
-    setPaintFace: (face: Face | null) => sceneRef.current?.setPaintFace(face),
+    setPaintFace: (face: string | null) => sceneRef.current?.setPaintFace(face),
     lookAt: (theta: number, phi: number, durationMs?: number) => sceneRef.current?.lookAt(theta, phi, durationMs) ?? Promise.resolve(),
   }));
 
