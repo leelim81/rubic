@@ -5,6 +5,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // A four-core runner defaults to two workers. Three overlaps the long
+  // animations and leaves a core for the preview server.
+  workers: process.env.CI ? 3 : undefined,
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:4173/rubic/",
