@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { applyFourString, fourMoveSpeech, invertFourMove, randomFourScramble, solvedFourString, validateFour } from "./cube/four";
 import { applyFiveString, fiveMoveSpeech, randomFiveScramble, solvedFiveString, validateFive } from "./cube/five";
 import { MEGA_COLORS, applyMegaString, megaMoveSpeech, randomMegaScramble, solvedMegaString } from "./megaminx/model";
 import { MEGA_PAINT_ORDER, blankMegaPaint, filledOnMegaFace, firstBlankMegaFace, megaFacePose, megaGuide, megaPaintCount } from "./megaminx/paint";
@@ -39,13 +40,13 @@ import {
 import { CubeView, type CubeHandle } from "./view/CubeView";
 import { Disclosure } from "./view/Disclosure";
 
+type Puzzle = 3 | 4 | 5 | "pyraminx" | "master" | "mega";
+
 const SOLVED = faceletsToString(solvedBytes());
 const STORAGE = "rubic-lesson-v1";
 const ENTERED = "rubic-entered-v1";
 const METHOD_KEY = "rubic-method-v1";
 const SIZE_KEY = "rubic-size-v1";
-
-type PuzzleSize = 3 | 5 | "mega" | "pyraminx" | "master";
 
 export function App() {
   const [entered, setEntered] = useState(() => readEntered());
@@ -70,7 +71,7 @@ export function App() {
   const lessonRef = useRef(lesson);
   const [turnMs, setTurnMs] = useState(750);
   const [method, setMethod] = useState<SolveMethod>(readMethod);
-  const [size, setSize] = useState<PuzzleSize>(readSize);
+  const [size, setSize] = useState<Puzzle>(readSize);
   const [loadingNote, setLoadingNote] = useState("Preparing the solution… you can keep looking at the cube.");
   const [solverPhase, setSolverPhase] = useState<SolverPhase>("idle");
   const [solverProgress, setSolverProgress] = useState({ received: 0, total: 0 });
@@ -275,7 +276,7 @@ export function App() {
       }
     }
     setLoadingNote("Preparing the solution… you can keep looking at the cube.");
-    return solveInWorker(start, start.length === 150 ? "expert" : chosen, setLoadingNote);
+    return solveInWorker(start, start.length === 54 ? chosen : "expert", setLoadingNote);
   }
 
   async function go(direction: 1 | -1) {
@@ -293,7 +294,7 @@ export function App() {
       if (lesson.history.length) setLesson((current) => stepBack(current));
       return;
     }
-    const move = direction === 1 ? nextMove! : invert(lesson.moves[lesson.cursor - 1] ?? "");
+    const move = direction === 1 ? nextMove! : invert(lesson.moves[lesson.cursor - 1] ?? "", size);
     if (!move) return;
     const nextFacelets = direction === 1
       ? applyUserMove(facelets, move)
@@ -362,7 +363,7 @@ export function App() {
     setLesson((current) => beginAnimation(current));
     cubeRef.current?.show(before);
     await cubeRef.current?.animate(move, after);
-    if (lesson.cursor === 0) await cubeRef.current?.animate(invert(move), facelets);
+    if (lesson.cursor === 0) await cubeRef.current?.animate(invert(move, size), facelets);
     setLesson((current) => endAnimation(current));
   }
 
@@ -450,7 +451,7 @@ export function App() {
     setSolverProgress({ received: 0, total: solverProgress.total });
   }
 
-  function chooseSize(next: PuzzleSize) {
+  function chooseSize(next: Puzzle) {
     setSize(next);
     if (next !== 3) setMethod("expert");
     setEntered(false);
@@ -507,8 +508,8 @@ export function App() {
       return;
     }
     const face = PAINT_FACES[paintStep];
-    const order: 3 | 5 = paintCells.length === 150 ? 5 : 3;
-    const stride = order === 5 ? 25 : 9;
+    const order: 3 | 4 | 5 = paintCells.length === 150 ? 5 : paintCells.length === 96 ? 4 : 3;
+    const stride = order === 5 ? 25 : order === 4 ? 16 : 9;
     if (!face || isCentre(index, order) || Math.floor(index / stride) !== "URFDLB".indexOf(face)) return;
     const letter = { white: "w", yellow: "y", red: "r", orange: "o", blue: "b", green: "g" }[paintColor];
     setPaintCells((current) => current.slice(0, index) + letter + current.slice(index + 1));
@@ -580,10 +581,10 @@ export function App() {
       void load(paintCells, "Solution started from the colours you entered.");
       return;
     }
-    if (paintCells.length === 150) {
-      const five = validateFive(paintCells);
-      if (!five.ok) {
-        rejectPaint(five.message, "F");
+    if (paintCells.length === 150 || paintCells.length === 96) {
+      const checked = paintCells.length === 150 ? validateFive(paintCells) : validateFour(paintCells);
+      if (!checked.ok) {
+        rejectPaint(checked.message, "F");
         return;
       }
       void load(paintCells);
@@ -630,6 +631,7 @@ export function App() {
       {!entered ? (
         <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(readPuzzle(event.target.value))}>
           <option value={3}>3×3</option>
+          <option value={4}>4×4</option>
           <option value={5}>5×5</option>
           <option value="pyraminx">Pyraminx</option>
           <option value="master">Master Pyraminx</option>
@@ -660,7 +662,7 @@ export function App() {
             />
           ) : null}
           <div className="hero">
-            <div className={shaking ? "cube-frame is-shaking" : "cube-frame"}>
+            <div className={shaking ? "cube-frame is-shaking" : "cube-frame"} data-facelets={mode === "paint" ? paintCells : facelets}>
               <CubeView
                 ref={cubeRef}
                 facelets={mode === "paint" ? paintCells : facelets}
@@ -735,6 +737,7 @@ export function App() {
               Cube
               <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(readPuzzle(event.target.value))}>
                 <option value={3}>3×3</option>
+                <option value={4}>4×4</option>
                 <option value={5}>5×5</option>
                 <option value="pyraminx">Pyraminx</option>
                 <option value="master">Master Pyraminx</option>
@@ -761,7 +764,7 @@ export function App() {
               <input type="checkbox" checked={letters} onChange={(event) => setLetters(event.target.checked)} />
               Letter stickers (W Y R O B G) as well as colour
             </label>
-            <p className="quiet">{size === "master" ? MASTER_HOLD : size === "pyraminx" ? PYRA_HOLD : size === "mega" ? "Hold the white centre on top, the grey centre on the bottom, and the green centre facing you. Right is red." : facelets.length === 150 ? "Hold the yellow centre on top, the white centre on the bottom, and the green centre facing you. Right is orange." : holdLine(stringToFacelets(facelets))}</p>
+            <p className="quiet">{size === "master" ? MASTER_HOLD : size === "pyraminx" ? PYRA_HOLD : size === "mega" ? "Hold the white centre on top, the grey centre on the bottom, and the green centre facing you. Right is red." : facelets.length === 150 ? "Hold the yellow centre on top, the white centre on the bottom, and the green centre facing you. Right is orange." : facelets.length === 54 ? holdLine(stringToFacelets(facelets)) : "Hold yellow on top, white on the bottom, and green in front. Right is orange."}</p>
             <p className="quiet">{size === "master"
               ? "Uw turns three layers around a tip. U turns the tip and the layer under it. A lowercase letter turns only the tip. Clockwise is as you look at the tip. Solve 3× plays the remaining moves at three times the selected speed."
               : size === "pyraminx"
@@ -771,6 +774,8 @@ export function App() {
               : "R means the right face, not red. A letter alone is clockwise as you look at that face. 2 is a half turn. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the cube as it was when that run started."}</p>
             <p className="quiet">{size === 5
               ? "5×5 is Expert only. The shorter solver is Tomas Rokicki’s gullicube (MPL-2.0). If it is not downloaded, or this device cannot run it, centres are solved first, then the edges, then the cube is reduced to a 3×3. A solution is correct, not a claim that no shorter one exists. White sits opposite yellow, red opposite orange, and blue opposite green."
+              : size === 4
+                ? "4×4 is Expert only. It has no fixed centre. Centres are solved first, then the edges, including the parity cases, then the cube is reduced to a 3×3. A solution is correct, not a claim that no shorter one exists."
               : size === "master"
                 ? "Master Pyraminx is Expert only. Wings are paired with the midges, that Pyraminx is solved with wide turns, then the face centres are restored. Yellow is on the bottom, green in front, red on the right, and blue on the left."
               : size === "pyraminx"
@@ -807,12 +812,12 @@ function PaintStatus({ step, cells, error }: { step: number; cells: string; erro
   const face = (pyra ? PYRA_FACES : PAINT_FACES)[step] ?? "F";
   const guide = master ? MASTER_GUIDE[face as "F"] : pyra ? PYRA_GUIDE[face as "F"] : PAINT_GUIDE[face];
   const filled = master ? masterFilled(cells, face as "F") : pyra ? pyraFilled(cells, face as "F") : filledOnFace(cells, face);
-  const total = master ? MASTER_PER_FACE : pyra ? 9 : paintableOnFace(cells.length === 150 ? 5 : 3);
+  const total = master ? MASTER_PER_FACE : pyra ? 9 : paintableOnFace(cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3);
   const steps = pyra ? PYRA_FACES.length : PAINT_FACES.length;
   return (
     <div className="status" aria-live="polite">
       <p id="cube-title" className="status-title" data-testid="paint-face">{guide.title} · {step + 1} of {steps}</p>
-      <p className="quiet">{guide.turn}</p>
+      <p className="quiet">{cells.length === 96 ? "A 4×4 has no fixed centre. Paint every sticker you see. The solution keeps yellow on top, white on the bottom, and green in front." : guide.turn}</p>
       <p className="quiet" data-testid="paint-progress">{filled}/{total} filled</p>
       {error ? <p className="error" role="alert">{error}</p> : null}
     </div>
@@ -866,8 +871,8 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
               aria-label={`${label}, ${current}`}
             />
           );
-        }) : Array.from({ length: cells.length === 150 ? 5 : 3 }, (_, row) => row).flatMap((row) => Array.from({ length: cells.length === 150 ? 5 : 3 }, (_, col) => {
-          const order = cells.length === 150 ? 5 : 3;
+        }) : Array.from({ length: cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3 }, (_, row) => row).flatMap((row) => Array.from({ length: cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3 }, (_, col) => {
+          const order = cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3;
           const index = faceletIndex(face as "F", row, col, order);
           const current = cells[index] === "." ? "blank" : STICKER_NAME[cells[index] ?? ""] ?? "unknown";
           const centre = isCentre(index, order);
@@ -907,7 +912,7 @@ function browserStorage(): Storage | null {
   }
 }
 
-function paintLabel(step: number, puzzle: PuzzleSize): string {
+function paintLabel(step: number, puzzle: Puzzle): string {
   if (puzzle === "mega") {
     const face = MEGA_PAINT_ORDER[step] ?? "F";
     const guide = megaGuide(face);
@@ -925,11 +930,12 @@ function paintLabel(step: number, puzzle: PuzzleSize): string {
   return `Painting the ${PAINT_GUIDE[face].title.toLowerCase()} face. ${PAINT_GUIDE[face].turn}`;
 }
 
-function plainMove(move: string, cubeSize: PuzzleSize = 3): string {
+function plainMove(move: string, cubeSize: Puzzle = 3): string {
   if (cubeSize === "mega") return `${move}. ${megaMoveSpeech(move)}`;
   if (cubeSize === "master") return `${move}. ${masterMoveSpeech(move)}`;
   if (cubeSize === "pyraminx") return `${move}. ${pyraMoveSpeech(move)}`;
   if (cubeSize === 5) return `${move}. ${fiveMoveSpeech(move)}`;
+  if (cubeSize === 4) return `${move}. ${fourMoveSpeech(move)}`;
   if (move.endsWith("2")) {
     const face = move[0] ?? "";
     return `${move}. Half turn: ${moveDirection(face)} and then the same way again.`;
@@ -937,27 +943,32 @@ function plainMove(move: string, cubeSize: PuzzleSize = 3): string {
   return `${move}. ${moveDirection(move)}.`;
 }
 
-function invert(move: string): string {
+function invert(move: string, cubeSize: Puzzle): string {
+  if (cubeSize === 4) return invertFourMove(move);
   return invertMove(move);
 }
 
-function applyScramble(cubeSize: PuzzleSize): string {
+function applyScramble(cubeSize: Puzzle): string {
   const seed = Math.floor(Math.random() * 1_000_000_000);
   if (cubeSize === "mega") return applyMegaString(solvedMegaString(), randomMegaScramble(mulberry32(seed), 20));
   if (cubeSize === "master") return applyMasterMoves(solvedMasterString(), randomMasterScramble(mulberry32(seed)));
   if (cubeSize === "pyraminx") return applyPyraMoves(solvedPyraString(), randomPyraScramble(mulberry32(seed)));
   if (cubeSize === 5) return applyFiveString(solvedFiveString(), randomFiveScramble(mulberry32(seed), 40));
+  if (cubeSize === 4) return applyFourString(solvedFourString(), randomFourScramble(mulberry32(seed), 40));
   return faceletsToString(applyMoves(solvedBytes(), randomScramble(mulberry32(seed), 22)));
 }
 
-function solvedFor(cubeSize: PuzzleSize): string {
+function solvedFor(cubeSize: Puzzle): string {
   if (cubeSize === "mega") return solvedMegaString();
   if (cubeSize === "master") return solvedMasterString();
   if (cubeSize === "pyraminx") return solvedPyraString();
-  return cubeSize === 5 ? solvedFiveString() : faceletsToString(solvedBytes());
+  if (cubeSize === 5) return solvedFiveString();
+  if (cubeSize === 4) return solvedFourString();
+  return faceletsToString(solvedBytes());
 }
 
-function readPuzzle(value: string | null): PuzzleSize {
+function readPuzzle(value: string | null): Puzzle {
+  if (value === "4") return 4;
   if (value === "5") return 5;
   if (value === "mega") return "mega";
   if (value === "pyraminx") return "pyraminx";
@@ -965,7 +976,7 @@ function readPuzzle(value: string | null): PuzzleSize {
   return 3;
 }
 
-function blankFor(size: PuzzleSize): string {
+function blankFor(size: Puzzle): string {
   if (size === "mega") return blankMegaPaint();
   if (size === "master") return blankMaster();
   if (size === "pyraminx") return blankPyra();
@@ -986,6 +997,10 @@ function cubeLabel(facelets: string, move: string | undefined): string {
   }
   if (facelets.length === 36) {
     return move ? `Pyraminx. Next move ${move}. ${PYRA_HOLD}` : `Pyraminx. ${PYRA_HOLD}`;
+  }
+  if (facelets.length === 96) {
+    const line = "4×4 has no fixed centre. Yellow stays on top, white on the bottom, and green in front.";
+    return move ? `Cube. Next move ${move}. ${line}` : `Cube. ${line}`;
   }
   if (facelets.length === 150) {
     const line = "Hold the yellow centre on top, the white centre on the bottom, and the green centre facing you. Right is orange.";
@@ -1010,7 +1025,7 @@ function readEntered(): boolean {
   }
 }
 
-function readSize(): PuzzleSize {
+function readSize(): Puzzle {
   try {
     return readPuzzle(localStorage.getItem(SIZE_KEY));
   } catch {

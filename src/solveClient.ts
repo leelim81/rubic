@@ -2,6 +2,7 @@ import { SolveStopped } from "./gullicube/client";
 import { solveMegaminx } from "./megaminx/solver";
 import { solveMaster } from "./pyraminx/masterSolve";
 import { solvePyraminx } from "./pyraminx/solve";
+import { solveFour } from "./solver/fourSolve";
 import { solveFive } from "./solver/fiveSolve";
 import type { Solution } from "./solver/beginner";
 import { solveBeginner } from "./solver/beginner";
@@ -14,6 +15,7 @@ function solveNow(facelets: string, method: SolveMethod): Solution {
   if (facelets.length === 36) return solvePyraminx(facelets);
   if (facelets.length === 150) return solveFive(facelets);
   if (facelets.length === 132) return solveMegaminx(facelets);
+  if (facelets.length === 96) return solveFour(facelets);
   return method === "expert" ? solveCube(facelets) : solveBeginner(facelets);
 }
 
@@ -33,7 +35,7 @@ export function solveInWorker(facelets: string, method: SolveMethod = "expert", 
     const timer = window.setTimeout(() => {
       worker.terminate();
       reject(new Error("The solution took too long to prepare."));
-    }, facelets.length === 54 ? 8_000 : 60_000);
+    }, facelets.length === 54 ? 8_000 : facelets.length === 96 ? 30_000 : 60_000);
     const stop = () => {
       window.clearTimeout(timer);
       signal?.removeEventListener("abort", stop);

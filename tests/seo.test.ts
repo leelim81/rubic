@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
-const TITLE = "Trevor\u2019s Real Rubik\u2019s Solver \u2014 step-by-step 3\u00d73 and 5\u00d75";
-const DESCRIPTION = "Trevor\u2019s Real Rubik\u2019s Solver helps you solve a physical 3\u00d73 or 5\u00d75 cube. Enter the colours you see, then follow a step-by-step 3D solution in your browser.";
+const TITLE = "Trevor\u2019s Real Rubik\u2019s Solver \u2014 3\u00d73, 4\u00d74, 5\u00d75";
+const DESCRIPTION = "Trevor\u2019s Real Rubik\u2019s Solver helps you solve a physical 3\u00d73, 4\u00d74 or 5\u00d75. Enter the colours you see, then follow a step-by-step 3D solution in your browser.";
 
 function meta(name: string, attr = "name"): string {
   const pattern = new RegExp(`<meta ${attr}="${name}" content="([^"]*)"`, "u");

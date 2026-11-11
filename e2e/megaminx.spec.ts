@@ -13,7 +13,7 @@ test("Megaminx is in the puzzle menu and has no beginner lesson", async ({ page 
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   const menu = page.getByLabel("Cube size");
-  await expect(menu.locator("option")).toHaveText(["3×3", "5×5", "Pyraminx", "Master Pyraminx", "Megaminx"]);
+  await expect(menu.locator("option")).toHaveText(["3×3", "4×4", "5×5", "Pyraminx", "Master Pyraminx", "Megaminx"]);
   await menu.selectOption("mega");
   await expect(menu).toHaveValue("mega");
   await expect(page.getByTestId("empty-prompt")).toBeVisible();

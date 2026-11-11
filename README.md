@@ -1,6 +1,8 @@
 # Trevor’s Real Rubik’s Solver
 
-A 3×3 and 5×5 solver that runs as a static site at [https://leelim81.github.io/rubic/](https://leelim81.github.io/rubic/).
+A 3×3, 4×4 and 5×5 solver that runs as a static site at [https://leelim81.github.io/rubic/](https://leelim81.github.io/rubic/).
+
+4×4 is Expert only and stays in the browser. It solves the centres, pairs the edges (including the parity cases), then finishes with the 3×3 solver. The move count is a correct reduction, not a claim that no shorter sequence exists.
 
 5×5 is Expert only. Choosing 5×5 downloads Tomas Rokicki’s [gullicube](https://github.com/rokicki/gullicube) (MPL-2.0; see `public/gullicube/NOTICE`) and keeps it in this browser. Cancel, a failed download, or a device that cannot give the solver the memory it needs falls back to the built-in reduction solver. The 3×3 solver is unchanged.
 
