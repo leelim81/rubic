@@ -1,4 +1,4 @@
-# Physical Cube Solver
+# Trevor’s Real Rubik’s Solver
 
 A 3×3 and 5×5 solver that runs as a static site at [https://leelim81.github.io/rubic/](https://leelim81.github.io/rubic/).
 
@@ -16,7 +16,9 @@ Drag the cube in **Rotate view** and the surface under your finger follows the d
 
 ## Privacy
 
-The solution and the colours you type stay in this browser (`sessionStorage` remembers the move list). There is no account, no server, and no upload.
+The solution and the colours you type stay in this browser (`sessionStorage` remembers the move list). There is no account and no upload.
+
+The footer visit count is the one request that leaves the browser. Once each browser session the page asks [Abacus](https://abacus.jasoncameron.dev/) (`abacus.jasoncameron.dev`) for a number and shows it as muted text such as “12,345 visits”. That request sends no cookies and no cube colours. A reload in the same session shows the stored number and does not count again. Automated browsers (`navigator.webdriver`) and a `?nocount` address are skipped. If Abacus fails or does not answer within about three seconds, the count stays hidden. Contact me opens your mail app; the address is assembled when the page runs.
 
 A scan can be geometrically legal and still be the wrong cube. The app asks you to compare the 3D reconstruction with the physical cube before the lesson starts. Uncertain sticker colours are flagged and need a tap. Tests of colour use synthetic lighting, not a claim about every real camera and lamp.
 

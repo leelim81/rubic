@@ -1,12 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const BRAND = "Physical Cube Solver";
+const BRAND = "Trevor\u2019s Real Rubik\u2019s Solver";
+const SHORT = "Trevor\u2019s Solver";
+const TITLE = "Trevor\u2019s Real Rubik\u2019s Solver \u2014 step-by-step 3\u00d73 and 5\u00d75";
 
-test("the page title and header use Physical Cube Solver", async ({ page }) => {
+test("the page title and header use Trevor's Real Rubik's Solver", async ({ page }) => {
   await page.goto("./");
-  await expect(page).toHaveTitle(BRAND);
-  await expect(page.locator("meta[property='og:title']")).toHaveAttribute("content", BRAND);
-  await expect(page.locator("meta[name='apple-mobile-web-app-title']")).toHaveAttribute("content", BRAND);
+  await expect(page).toHaveTitle(TITLE);
+  await expect(page.locator("meta[property='og:title']")).toHaveAttribute("content", TITLE);
+  await expect(page.locator("meta[name='apple-mobile-web-app-title']")).toHaveAttribute("content", SHORT);
+  await expect(page.getByRole("heading", { level: 1, name: BRAND })).toBeVisible();
   await expectBrand(page);
 });
 
@@ -27,7 +30,7 @@ test("the brand stays on one line at phone, landscape, and desktop widths", asyn
     });
     await page.reload();
     await page.getByRole("button", { name: "Enter colours" }).waitFor();
-    await expect(page).toHaveTitle(BRAND);
+    await expect(page).toHaveTitle(TITLE);
     await expectBrand(page);
     if (size.shot) await page.screenshot({ path: size.shot });
 
@@ -41,7 +44,7 @@ test("the brand stays on one line at phone, landscape, and desktop widths", asyn
 async function expectBrand(page: Page) {
   const view = page.viewportSize();
   expect(view).toBeTruthy();
-  const expected = view!.width >= 375 ? BRAND : "Cube Solver";
+  const expected = view!.width >= 640 ? BRAND : SHORT;
   const brand = page.getByTestId("brand");
   await expect(brand.locator("span:visible")).toHaveText(expected);
   const box = await brand.boundingBox();
