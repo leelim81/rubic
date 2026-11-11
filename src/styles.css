@@ -20,6 +20,36 @@
   --orange: #f18f01;
   --blue: #2f6fed;
   --green: #1f9d55;
+  --white-ink: #000000;
+  --yellow-ink: #000000;
+  --orange-ink: #000000;
+  --red-ink: #ffffff;
+  --blue-ink: #ffffff;
+  --green-ink: #000000;
+  --white-halo: #ffffff;
+  --yellow-halo: #ffffff;
+  --orange-halo: #ffffff;
+  --red-halo: #000000;
+  --blue-halo: #000000;
+  --green-halo: #ffffff;
+  --purple: #7c3aed;
+  --pink: #ec4899;
+  --sky: #22d3ee;
+  --lime: #84cc16;
+  --cream: #e7c98a;
+  --grey: #94a3b8;
+  --purple-ink: #ffffff;
+  --pink-ink: #000000;
+  --sky-ink: #000000;
+  --lime-ink: #000000;
+  --cream-ink: #000000;
+  --grey-ink: #000000;
+  --purple-halo: #000000;
+  --pink-halo: #ffffff;
+  --sky-halo: #ffffff;
+  --lime-halo: #ffffff;
+  --cream-halo: #ffffff;
+  --grey-halo: #ffffff;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   font-weight: 400;
   background: var(--bg);
@@ -290,6 +320,40 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
 .row button, .palette button { flex: 1 1 auto; }
 .restore-short { display: none; }
 .check { display: flex; gap: 0.6rem; align-items: flex-start; margin: 0.8rem 0; }
+.palette-switch { align-items: center; margin: 0.1rem 0 0; }
+.palette-switch + .check { margin-top: 0.1rem; }
+.switch-ui { position: relative; width: 36px; height: 22px; flex: 0 0 auto; }
+.switch-ui input {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 36px;
+  height: 22px;
+  min-height: 22px;
+  margin: 0;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-3);
+  cursor: pointer;
+}
+.switch-ui input:checked { background: var(--accent); border-color: transparent; }
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  pointer-events: none;
+  transition: transform 160ms ease, background 160ms ease;
+}
+.switch-ui input:checked + .switch-knob { transform: translateX(16px); background: #ffffff; }
+@media (prefers-reduced-motion: reduce) {
+  .switch-knob { transition: none; }
+}
 .alg { display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0; list-style: none; }
 .alg li { border: 1px solid var(--line); border-radius: 999px; padding: 0.2rem 0.55rem; }
 .alg li.done { opacity: 0.45; }
@@ -348,18 +412,31 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
   box-shadow: 0 0 0 6px rgba(124, 107, 255, 0.45);
 }
 .palette { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.8rem 0; }
-.palette button[data-colour="white"] { background: var(--white); color: #000000; text-shadow: 0 0 2px #ffffff; }
-.palette button[data-colour="yellow"] { background: var(--yellow); color: #000000; text-shadow: 0 0 2px #ffffff; }
-.palette button[data-colour="red"] { background: var(--red); color: #ffffff; text-shadow: 0 0 2px #000000; }
-.palette button[data-colour="orange"] { background: var(--orange); color: #000000; text-shadow: 0 0 2px #ffffff; }
-.palette button[data-colour="blue"] { background: var(--blue); color: #ffffff; text-shadow: 0 0 2px #000000; }
-.palette button[data-colour="green"] { background: var(--green); color: #000000; text-shadow: 0 0 2px #ffffff; }
-.palette button[data-colour="purple"] { background: #6d35d4; color: #ffffff; text-shadow: 0 0 2px #1a0838; }
-.palette button[data-colour="pink"] { background: #e45aa0; color: #2a0618; text-shadow: 0 0 2px #ffffff; }
-.palette button[data-colour="lime"] { background: #b6e034; color: #172000; text-shadow: 0 0 2px #ffffff; }
-.palette button[data-colour="sky"] { background: #49c2f2; color: #06202c; text-shadow: 0 0 2px #ffffff; }
-.palette button[data-colour="cream"] { background: #e6c56e; color: #241800; text-shadow: 0 0 2px #ffffff; }
-.palette button[data-colour="grey"] { background: #8b90a0; color: #12141c; text-shadow: 0 0 2px #ffffff; }
+.palette button[data-colour="white"], .sticker[data-colour="white"] { background: var(--white); color: var(--white-ink); text-shadow: 0 0 2px var(--white-halo); }
+.palette button[data-colour="yellow"], .sticker[data-colour="yellow"] { background: var(--yellow); color: var(--yellow-ink); text-shadow: 0 0 2px var(--yellow-halo); }
+.palette button[data-colour="red"], .sticker[data-colour="red"] { background: var(--red); color: var(--red-ink); text-shadow: 0 0 2px var(--red-halo); }
+.palette button[data-colour="orange"], .sticker[data-colour="orange"] { background: var(--orange); color: var(--orange-ink); text-shadow: 0 0 2px var(--orange-halo); }
+.palette button[data-colour="blue"], .sticker[data-colour="blue"] { background: var(--blue); color: var(--blue-ink); text-shadow: 0 0 2px var(--blue-halo); }
+.palette button[data-colour="green"], .sticker[data-colour="green"] { background: var(--green); color: var(--green-ink); text-shadow: 0 0 2px var(--green-halo); }
+.palette button[data-colour="purple"], .sticker[data-colour="purple"] { background: var(--purple); color: var(--purple-ink); text-shadow: 0 0 2px var(--purple-halo); }
+.palette button[data-colour="pink"], .sticker[data-colour="pink"] { background: var(--pink); color: var(--pink-ink); text-shadow: 0 0 2px var(--pink-halo); }
+.palette button[data-colour="sky"], .sticker[data-colour="sky"] { background: var(--sky); color: var(--sky-ink); text-shadow: 0 0 2px var(--sky-halo); }
+.palette button[data-colour="lime"], .sticker[data-colour="lime"] { background: var(--lime); color: var(--lime-ink); text-shadow: 0 0 2px var(--lime-halo); }
+.palette button[data-colour="cream"], .sticker[data-colour="cream"] { background: var(--cream); color: var(--cream-ink); text-shadow: 0 0 2px var(--cream-halo); }
+.palette button[data-colour="grey"], .sticker[data-colour="grey"] { background: var(--grey); color: var(--grey-ink); text-shadow: 0 0 2px var(--grey-halo); }
+/* Sampled photo pixels stay put in the standard palette. Pastel replaces them with the display colour. */
+html[data-palette="pastel"] .sticker[data-colour="white"] { background-color: var(--white) !important; }
+html[data-palette="pastel"] .sticker[data-colour="yellow"] { background-color: var(--yellow) !important; }
+html[data-palette="pastel"] .sticker[data-colour="red"] { background-color: var(--red) !important; }
+html[data-palette="pastel"] .sticker[data-colour="orange"] { background-color: var(--orange) !important; }
+html[data-palette="pastel"] .sticker[data-colour="blue"] { background-color: var(--blue) !important; }
+html[data-palette="pastel"] .sticker[data-colour="green"] { background-color: var(--green) !important; }
+html[data-palette="pastel"] .sticker[data-colour="purple"] { background-color: var(--purple) !important; }
+html[data-palette="pastel"] .sticker[data-colour="pink"] { background-color: var(--pink) !important; }
+html[data-palette="pastel"] .sticker[data-colour="sky"] { background-color: var(--sky) !important; }
+html[data-palette="pastel"] .sticker[data-colour="lime"] { background-color: var(--lime) !important; }
+html[data-palette="pastel"] .sticker[data-colour="cream"] { background-color: var(--cream) !important; }
+html[data-palette="pastel"] .sticker[data-colour="grey"] { background-color: var(--grey) !important; }
 .paint-palette.is-twelve { flex-wrap: wrap; }
 .paint-palette.is-twelve button { flex: 1 1 36px; width: auto; min-width: 36px; max-width: 52px; }
 .sticker-grid { display: grid; grid-template-columns: repeat(3, minmax(44px, 1fr)); gap: 6px; width: min(100%, 240px); }
@@ -370,12 +447,6 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
   font-weight: 700;
   background: #3a342c;
 }
-.sticker[data-colour="white"] { background: var(--white); color: #000000; }
-.sticker[data-colour="yellow"] { background: var(--yellow); color: #000000; }
-.sticker[data-colour="red"] { background: var(--red); color: #ffffff; }
-.sticker[data-colour="orange"] { background: var(--orange); color: #000000; }
-.sticker[data-colour="blue"] { background: var(--blue); color: #ffffff; }
-.sticker[data-colour="green"] { background: var(--green); color: #000000; }
 .sticker.uncertain { outline: 3px dashed var(--bad); }
 .sticker.selected { outline: 3px solid var(--text); outline-offset: 2px; }
 .viewfinder { position: relative; border-radius: 16px; overflow: hidden; background: #000; min-height: 220px; }

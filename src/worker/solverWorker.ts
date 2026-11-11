@@ -1,4 +1,6 @@
 import { solveMegaminx } from "../megaminx/solver";
+import { solveMaster } from "../pyraminx/masterSolve";
+import { solvePyraminx } from "../pyraminx/solve";
 import { solveFive } from "../solver/fiveSolve";
 import { solveBeginner } from "../solver/beginner";
 import { solveCube } from "../solver/twoPhase";
@@ -8,6 +10,14 @@ self.onmessage = (event: MessageEvent<{ facelets: string; method?: "beginner" | 
     if (event.data.facelets.length === 132) {
       const solution = solveMegaminx(event.data.facelets, (progress) => self.postMessage({ progress }));
       self.postMessage({ solution });
+      return;
+    }
+    if (event.data.facelets.length === 64) {
+      self.postMessage({ solution: solveMaster(event.data.facelets) });
+      return;
+    }
+    if (event.data.facelets.length === 36) {
+      self.postMessage({ solution: solvePyraminx(event.data.facelets) });
       return;
     }
     if (event.data.facelets.length === 150) {

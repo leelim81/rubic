@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { cameraDistance, HOME_PHI, HOME_THETA, orbitBy, viewIsShifted } from "../view/camera";
 import type { CubeSceneOptions } from "../view/cubeScene";
+import { displaySwatch, getPalette, subscribePalette, type LogicalColour } from "../view/palette";
 import {
   FACE_NAMES,
   MEGA_COLORS,
@@ -55,6 +56,7 @@ export class MegaminxScene {
   private geometries: THREE.BufferGeometry[] = [];
   private materials: THREE.Material[] = [];
   private letterMaps = new Map<string, THREE.CanvasTexture>();
+  private unsubscribePalette: () => void = () => {};
 
   constructor(private canvas: HTMLCanvasElement, options: CubeSceneOptions) {
     this.options = options;
@@ -75,6 +77,7 @@ export class MegaminxScene {
     const exposed = this.canvas as HTMLCanvasElement & { __rubicPose?: () => { theta: number; phi: number }; __rubicPick?: (x: number, y: number) => number | null };
     exposed.__rubicPose = () => ({ theta: this.theta, phi: this.phi });
     exposed.__rubicPick = (x, y) => this.pickIndex(x, y);
+    this.unsubscribePalette = subscribePalette(this.onPalette);
     this.canvas.addEventListener("pointerdown", this.onDown, { passive: false });
     this.canvas.addEventListener("pointermove", this.onMove, { passive: false });
     this.canvas.addEventListener("pointerup", this.onUp);
@@ -201,6 +204,7 @@ export class MegaminxScene {
 
   dispose() {
     this.disposed = true;
+    this.unsubscribePalette();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.canvas.removeEventListener("pointerdown", this.onDown);
@@ -274,7 +278,7 @@ export class MegaminxScene {
         material.color.set(dim ? "#6a645c" : "#d7d1c6");
         sticker.letter.visible = false;
       } else {
-        material.color.set(colour.hex);
+        material.color.set(displaySwatch(colour.id as LogicalColour).hex);
         if (dim) material.color.multiplyScalar(0.55);
         sticker.letter.visible = this.options.letters;
         glyph.map = this.letterTexture(colour.id);
@@ -285,10 +289,20 @@ export class MegaminxScene {
     }
   }
 
+  private onPalette = () => {
+    this.letterMaps.forEach((texture) => texture.dispose());
+    this.letterMaps.clear();
+    if (this.facelets) this.paint(this.facelets);
+    if (!this.disposed) this.renderer.render(this.scene, this.camera);
+  };
+
   private letterTexture(id: string) {
-    const cached = this.letterMaps.get(id);
+    const key = `${getPalette()}:${id}`;
+    const cached = this.letterMaps.get(key);
     if (cached) return cached;
-    const colour = MEGA_COLORS.find((item) => item.id === id)!;
+    const colour = MEGA_COLORS.find((item) => item.id === id);
+    if (!colour) return null;
+    const swatch = displaySwatch(colour.id as LogicalColour);
     const canvas = document.createElement("canvas");
     canvas.width = 128;
     canvas.height = 128;
@@ -299,13 +313,13 @@ export class MegaminxScene {
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.lineWidth = 10;
-    context.strokeStyle = colour.halo;
+    context.strokeStyle = swatch.halo;
     context.strokeText(colour.mark, 64, 68);
-    context.fillStyle = colour.ink;
+    context.fillStyle = swatch.ink;
     context.fillText(colour.mark, 64, 68);
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    this.letterMaps.set(id, texture);
+    this.letterMaps.set(key, texture);
     return texture;
   }
 

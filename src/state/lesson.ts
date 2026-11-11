@@ -1,6 +1,8 @@
 import { applyFiveString } from "../cube/five";
 import { applyMoves, faceletsToString, stringToFacelets } from "../cube/model";
 import { applyMegaString } from "../megaminx/model";
+import { applyMaster, applyMasterMoves } from "../pyraminx/master";
+import { applyPyra, applyPyraMoves } from "../pyraminx/model";
 import type { Solution, TeachingChunk } from "../solver/beginner";
 
 export interface LessonSnapshot {
@@ -51,6 +53,8 @@ export function emptyLesson(solved: string): Lesson {
 export function currentFacelets(lesson: Lesson): string {
   const moves = lesson.moves.slice(0, lesson.cursor);
   if (lesson.pending) moves.push(lesson.pending.move);
+  if (lesson.start.length === 64) return applyMasterMoves(lesson.start, moves);
+  if (lesson.start.length === 36) return applyPyraMoves(lesson.start, moves);
   if (lesson.start.length === 150) return applyFiveString(lesson.start, moves);
   if (lesson.start.length === 132) return applyMegaString(lesson.start, moves);
   return faceletsToString(applyMoves(stringToFacelets(lesson.start), moves));
@@ -270,11 +274,13 @@ export function solvingHeadline(method: "beginner" | "expert", stageStep: string
 }
 
 export function applyUserMove(facelets: string, move: string): string {
+  if (facelets.length === 64) return applyMaster(facelets, move);
+  if (facelets.length === 36) return applyPyra(facelets, move);
   if (facelets.length === 150) return applyFiveString(facelets, [move]);
   if (facelets.length === 132) return applyMegaString(facelets, [move]);
   return faceletsToString(applyMoves(stringToFacelets(facelets), [move]));
 }
 
 export function sameBytes(left: string, right: string): boolean {
-  return left === right && (left.length === 54 || left.length === 132 || left.length === 150);
+  return left === right && (left.length === 54 || left.length === 132 || left.length === 150 || left.length === 36 || left.length === 64);
 }
