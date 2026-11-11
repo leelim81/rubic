@@ -9,6 +9,7 @@ import {
   solvedMasterString,
 } from "../src/pyraminx/master";
 import { PYRA_FACES, type PyraFace } from "../src/pyraminx/model";
+import { solveMaster } from "../src/pyraminx/masterSolve";
 
 const SOLVED = solvedMasterString();
 const LETTER_COLOUR: Record<string, string> = { g: "green", r: "red", b: "blue", y: "yellow" };
@@ -41,7 +42,7 @@ test("Master Pyraminx is a puzzle option, and a painted scramble solves back", a
   }
   await expect(page.getByTestId("paint-cells")).toHaveText(scramble);
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByTestId("lesson-step")).toHaveText(/Expert · Move 1 of \d+/, { timeout: 30_000 });
+  await expect(page.getByTestId("lesson-step")).toHaveText(`Expert · Move 1 of ${solveMaster(scramble).moves.length}`, { timeout: 30_000 });
   await expect(page.getByTestId("lesson-facelets")).toHaveText(scramble);
   await page.locator("details.options-panel summary").click();
   const method = page.getByRole("combobox", { name: "Solution method" });

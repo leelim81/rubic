@@ -9,6 +9,7 @@ import {
   pyraStickerPoint,
   solvedPyraString,
 } from "../src/pyraminx/model";
+import { solvePyraminx } from "../src/pyraminx/solve";
 
 const SOLVED = solvedPyraString();
 const FACE_COLOUR: Record<PyraFace, string> = { F: "green", R: "red", L: "blue", D: "yellow" };
@@ -43,6 +44,7 @@ test("Pyraminx is a puzzle option, and a painted scramble solves back", async ({
   await expect(page.getByTestId("paint-cells")).toHaveText(scramble);
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByTestId("lesson-step")).toHaveText(/Expert · Move 1 of \d+/, { timeout: 20_000 });
+  await expect(page.getByTestId("lesson-step")).toHaveText(`Expert · Move 1 of ${solvePyraminx(scramble).moves.length}`);
   await expect(page.getByTestId("lesson-step")).not.toContainText("Beginner");
   await expect(page.getByTestId("lesson-facelets")).toHaveText(scramble);
 

@@ -49,8 +49,23 @@ describe("Master Pyraminx solver", () => {
       const state = applyMasterMoves(SOLVED_MASTER, randomMasterScramble(mulberry32(seed), 16));
       const solution = solveMaster(state);
       expect(applyMasterMoves(state, solution.moves)).toBe(SOLVED_MASTER);
-      expect(solution.moves.length).toBeLessThan(80);
+      expect(solution.moves.length).toBeLessThan(55);
     }
     expect(solveMaster(SOLVED_MASTER).moves).toEqual([]);
   });
+
+  for (const [from, to] of [[1, 50], [51, 100], [101, 150], [151, 200]] as const) {
+    it(`solves seeded scrambles ${from}–${to} when the solution is replayed`, async () => {
+      const lengths: number[] = [];
+      for (let seed = from; seed <= to; seed += 1) {
+        const state = applyMasterMoves(SOLVED_MASTER, randomMasterScramble(mulberry32(seed), 20));
+        const solution = solveMaster(state);
+        expect(applyMasterMoves(state, solution.moves)).toBe(SOLVED_MASTER);
+        expect(solution.moves.length).toBeLessThanOrEqual(55);
+        lengths.push(solution.moves.length);
+        if ((seed - from) % 5 === 4) await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      expect(lengths.reduce((sum, length) => sum + length, 0) / lengths.length).toBeLessThan(42);
+    }, 120_000);
+  }
 });

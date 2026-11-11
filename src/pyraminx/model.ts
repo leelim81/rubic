@@ -439,6 +439,37 @@ export function coreKey(core: Core): number {
   return centers * 46080 + ori * 720 + perm;
 }
 
+const PERM_PLACE = [120, 24, 6, 2, 1, 1];
+
+/** Inverse of {@link coreKey}. Used by the distance table. */
+export function coreFromKey(key: number): Core {
+  const centers = Math.floor(key / 46080);
+  const rest = key % 46080;
+  const ori = Math.floor(rest / 720);
+  let perm = rest % 720;
+  const co = [0, 0, 0, 0];
+  let centerBits = centers;
+  for (let index = 3; index >= 0; index -= 1) {
+    co[index] = centerBits % 3;
+    centerBits = Math.floor(centerBits / 3);
+  }
+  const eo = [0, 0, 0, 0, 0, 0];
+  let oriBits = ori;
+  for (let index = 5; index >= 0; index -= 1) {
+    eo[index] = oriBits & 1;
+    oriBits >>= 1;
+  }
+  const available = [0, 1, 2, 3, 4, 5];
+  const ep: number[] = [];
+  for (let slot = 0; slot < 6; slot += 1) {
+    const place = PERM_PLACE[slot]!;
+    const digit = Math.floor(perm / place);
+    perm %= place;
+    ep.push(available.splice(digit, 1)[0]!);
+  }
+  return { ep, eo, co };
+}
+
 export function readCoreOf(state: string): Core | null {
   return readCore(state);
 }
