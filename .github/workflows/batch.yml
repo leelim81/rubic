@@ -1,0 +1,27 @@
+name: Full batch tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly. This workflow does not deploy and does not block Pages.
+    - cron: "0 7 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: batch-tests
+  cancel-in-progress: false
+
+jobs:
+  batch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:batch

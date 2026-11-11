@@ -14,6 +14,7 @@ import { faceletsFromCubie } from "../src/cube/model";
 import { validateBytes } from "../src/cube/validate";
 import { solveBeginner, solveBeginnerRaw, stageGoalMet, type StageId } from "../src/solver/beginner";
 import { cancelCommuting, labelStages, stripWaste } from "../src/solver/optimize";
+import { batchRanges } from "./batchSize";
 
 const COLOR_TO_FACE: Record<string, string> = { y: "U", o: "R", g: "F", w: "D", r: "L", b: "B" };
 const FACE_TO_COLOR: Record<string, string> = { U: "y", R: "o", F: "g", D: "w", L: "r", B: "b" };
@@ -147,7 +148,7 @@ describe("beginner method", () => {
     }
   });
 
-  for (const [from, to] of [[1, 500], [501, 1000], [1001, 1500], [1501, 2000]] as const) {
+  for (const [from, to] of batchRanges([[1, 500], [501, 1000], [1001, 1500], [1501, 2000]] as const)) {
   it(`solves random legal cubes ${from}–${to} without wasted moves`, async () => {
     const count = to - from + 1;
     let rawTotal = 0;

@@ -4,9 +4,10 @@ import { Worker } from "node:worker_threads";
 import { describe, expect, it } from "vitest";
 import { applyFiveString, randomFiveScramble, solvedFiveString } from "../src/cube/five";
 import { mulberry32 } from "../src/cube/model";
+import { batchCount } from "./batchSize";
 import { applySim, simString, solvedSim } from "./fiveSim";
 
-const SOLVES = Number(process.env.GULLI_SOLVES || 100);
+const SOLVES = batchCount("GULLI_SOLVES", 100);
 
 interface Reply {
   ok: boolean;

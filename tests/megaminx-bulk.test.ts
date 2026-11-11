@@ -6,8 +6,9 @@ import { describe, expect, it } from "vitest";
 import * as esbuild from "esbuild";
 import { mulberry32 } from "../src/cube/model";
 import { applyMegaString, randomMegaScramble, solvedMegaString } from "../src/megaminx/model";
+import { batchCount } from "./batchSize";
 
-const SOLVES = Number(process.env.MEGA_SOLVES || 200);
+const SOLVES = batchCount("MEGA_SOLVES", 200);
 const SCRAMBLE = 70;
 const SOLVED = solvedMegaString();
 

@@ -6,8 +6,9 @@ import { describe, expect, it } from "vitest";
 import * as esbuild from "esbuild";
 import { applyFourString, randomFourScramble, solvedFourString } from "../src/cube/four";
 import { mulberry32 } from "../src/cube/model";
+import { batchCount } from "./batchSize";
 
-const SOLVES = Number(process.env.FOUR_SOLVES || 1000);
+const SOLVES = batchCount("FOUR_SOLVES", 1000);
 
 interface Reply {
   ok: boolean;

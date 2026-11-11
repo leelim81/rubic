@@ -11,6 +11,7 @@ import {
   validateMaster,
 } from "../src/pyraminx/master";
 import { solveMaster } from "../src/pyraminx/masterSolve";
+import { batchRanges } from "./batchSize";
 
 describe("Master Pyraminx moves", () => {
   it("turns tips, one layer, and three layers, and wide turns match a Pyraminx", () => {
@@ -54,7 +55,7 @@ describe("Master Pyraminx solver", () => {
     expect(solveMaster(SOLVED_MASTER).moves).toEqual([]);
   });
 
-  for (const [from, to] of [[1, 50], [51, 100], [101, 150], [151, 200]] as const) {
+  for (const [from, to] of batchRanges([[1, 50], [51, 100], [101, 150], [151, 200]] as const)) {
     it(`solves seeded scrambles ${from}–${to} when the solution is replayed`, async () => {
       const lengths: number[] = [];
       for (let seed = from; seed <= to; seed += 1) {
