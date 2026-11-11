@@ -1,0 +1,15 @@
+{
+  "name": "Trevor’s Real Rubik’s Solver",
+  "short_name": "Trevor’s Solver",
+  "description": "Enter the colours on a physical 3×3 or 5×5 and follow a step-by-step 3D solution.",
+  "start_url": "/rubic/",
+  "scope": "/rubic/",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "lang": "en",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

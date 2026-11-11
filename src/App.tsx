@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { applyFiveString, fiveMoveSpeech, randomFiveScramble, solvedFiveString, validateFive } from "./cube/five";
 import { COLORS, type ColorName, applyMoves, centerColor, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
 import { PAINT_FACES, PAINT_GUIDE, blankCount, blankMessage, blankPaint, faceAfterFailedDone, facePose, filledOnFace, faceletIndex, isCentre, paintableOnFace, paintErrorMessage } from "./view/paint";
@@ -545,29 +546,26 @@ export function App() {
     : labels.step;
   const moveLine = solving && nextMove ? plainMove(nextMove, size) : "";
 
+  const headerSlot = document.getElementById("header-slot");
+  const tools = mode !== "paint" ? (
+    <div className="header-tools">
+      {!entered ? (
+        <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(event.target.value === "5" ? 5 : 3)}>
+          <option value={3}>3×3</option>
+          <option value={5}>5×5</option>
+        </select>
+      ) : null}
+      {entered && mode === "cube" ? (
+        <nav aria-label="Primary">
+          <button type="button" className="text-button" onClick={startPaint}>Edit colours</button>
+        </nav>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
-    <div className="app">
-      <header className="top">
-        <p className="mark" data-testid="brand">
-          <span className="mark-full">Physical Cube Solver</span>
-          <span className="mark-short" aria-hidden="true">Cube Solver</span>
-        </p>
-        {mode !== "paint" ? (
-          <div className="header-tools">
-            {!entered ? (
-              <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(event.target.value === "5" ? 5 : 3)}>
-                <option value={3}>3×3</option>
-                <option value={5}>5×5</option>
-              </select>
-            ) : null}
-            {entered && mode === "cube" ? (
-              <nav aria-label="Primary">
-                <button type="button" className="text-button" onClick={startPaint}>Edit colours</button>
-              </nav>
-            ) : null}
-          </div>
-        ) : null}
-      </header>
+    <>
+      {headerSlot && tools ? createPortal(tools, headerSlot) : null}
       <main>
         <section className={mode === "paint" ? "stage-column is-paint" : entered ? "stage-column" : "stage-column is-empty"} aria-labelledby="cube-title">
           {size === 5 ? (
@@ -690,7 +688,7 @@ export function App() {
           </div>
         </section>
       </main>
-    </div>
+    </>
   );
 }
 

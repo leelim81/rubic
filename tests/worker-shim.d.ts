@@ -1,5 +1,6 @@
 declare module "node:fs" {
   export function mkdtempSync(prefix: string): string;
+  export function readFileSync(path: string | URL, encoding: "utf8"): string;
 }
 
 declare module "node:os" {
