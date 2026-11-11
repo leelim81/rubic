@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { availableParallelism, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { describe, expect, it } from "vitest";
@@ -28,7 +28,8 @@ describe("4×4 random solves", () => {
       outfile,
       logLevel: "silent",
     });
-    const workers = Math.max(1, Math.min(2, availableParallelism()));
+    // One worker keeps the test process free to answer Vitest while the solves run.
+    const workers = 1;
     const pool = Array.from({ length: workers }, () => createSolver(outfile));
     const lengths: number[] = [];
     const times: number[] = [];
