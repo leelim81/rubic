@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const BRAND = "Trevor\u2019s Real Rubik\u2019s Solver";
 const SHORT = "Trevor\u2019s Solver";
-const TITLE = "Trevor\u2019s Real Rubik\u2019s Solver \u2014 step-by-step 3\u00d73 and 5\u00d75";
+const TITLE = "Trevor\u2019s Real Rubik\u2019s Solver \u2014 3\u00d73, 4\u00d74, 5\u00d75";
 
 test("the page title and header use Trevor's Real Rubik's Solver", async ({ page }) => {
   await page.goto("./");

@@ -1,3 +1,4 @@
+import { solveFour } from "../solver/fourSolve";
 import { solveFive } from "../solver/fiveSolve";
 import { solveBeginner } from "../solver/beginner";
 import { solveCube } from "../solver/twoPhase";
@@ -6,6 +7,11 @@ self.onmessage = (event: MessageEvent<{ facelets: string; method?: "beginner" | 
   try {
     if (event.data.facelets.length === 150) {
       const solution = solveFive(event.data.facelets, (progress) => self.postMessage({ progress }));
+      self.postMessage({ solution });
+      return;
+    }
+    if (event.data.facelets.length === 96) {
+      const solution = solveFour(event.data.facelets, (progress) => self.postMessage({ progress }));
       self.postMessage({ solution });
       return;
     }

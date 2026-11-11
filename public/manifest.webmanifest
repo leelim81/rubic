@@ -1,7 +1,7 @@
 {
   "name": "Trevor’s Real Rubik’s Solver",
   "short_name": "Trevor’s Solver",
-  "description": "Enter the colours on a physical 3×3 or 5×5 and follow a step-by-step 3D solution.",
+  "description": "Enter the colours on a physical 3×3, 4×4 or 5×5 and follow a step-by-step 3D solution.",
   "start_url": "/rubic/",
   "scope": "/rubic/",
   "display": "standalone",

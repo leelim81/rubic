@@ -1,10 +1,11 @@
 import * as THREE from "three";
 import { type ColorName, type Face, FACES, faceOffset, LETTER_COLOR } from "../cube/model";
 import { FIVE_SLOTS, parseFiveMove } from "../cube/five";
+import { FOUR_SLOTS, parseFourMove } from "../cube/four";
 import { BLANK, isCentre } from "./paint";
 import { SLOTS } from "../cube/model";
 import { cameraDistance, HOME_PHI, HOME_THETA, orbitBy, viewIsShifted } from "./camera";
-import { FIVE_BODY, FIVE_LIFT, FIVE_PITCH, FIVE_STICKER, THREE_BODY, THREE_LIFT, THREE_PITCH, THREE_STICKER } from "./metrics";
+import { FIVE_BODY, FIVE_LIFT, FIVE_PITCH, FIVE_STICKER, FOUR_BODY, FOUR_LIFT, FOUR_PITCH, FOUR_STICKER, THREE_BODY, THREE_LIFT, THREE_PITCH, THREE_STICKER } from "./metrics";
 import { LABEL_HALO, LABEL_INK, STICKER_HEX, STICKER_MARK } from "./contrast";
 
 const MOVE_ANGLE: Record<string, { axis: "x" | "y" | "z"; layer: (value: number) => boolean; angle: number }> = {
@@ -71,7 +72,7 @@ export class CubeScene {
   private animating = false;
   private idleStamp = 0;
   private options: CubeSceneOptions;
-  private order: 3 | 5 = 3;
+  private order: 3 | 4 | 5 = 3;
   private resizeObserver: ResizeObserver;
   private textures = new Map<string, THREE.CanvasTexture>();
   private blankMap: THREE.CanvasTexture | null = null;
@@ -116,7 +117,7 @@ export class CubeScene {
   }
 
   setFacelets(facelets: string) {
-    const order = facelets.length === 150 ? 5 : 3;
+    const order = facelets.length === 150 ? 5 : facelets.length === 96 ? 4 : 3;
     if (order !== this.order) {
       this.order = order;
       this.clearCubies();
@@ -211,6 +212,10 @@ export class CubeScene {
 
   private buildCubies() {
     const order = this.order;
+    if (order === 4) {
+      this.buildFourCubies();
+      return;
+    }
     const k = order === 3 ? 1 : 2;
     const pitch = order === 3 ? THREE_PITCH : FIVE_PITCH;
     const bodySize = order === 3 ? THREE_BODY : FIVE_BODY;
@@ -246,10 +251,41 @@ export class CubeScene {
     }
   }
 
+  private buildFourCubies() {
+    const layers = [-3, -1, 1, 3];
+    for (const x of layers) {
+      for (const y of layers) {
+        for (const z of layers) {
+          if (Math.abs(x) === 1 && Math.abs(y) === 1 && Math.abs(z) === 1) continue;
+          const group = new THREE.Group();
+          group.position.set(x * FOUR_PITCH, y * FOUR_PITCH, z * FOUR_PITCH);
+          const body = new THREE.Mesh(
+            new THREE.BoxGeometry(FOUR_BODY, FOUR_BODY, FOUR_BODY),
+            new THREE.MeshStandardMaterial({ color: "#07070b", roughness: 0.38, metalness: 0.18 }),
+          );
+          group.add(body);
+          const cubie: Cubie = { mesh: group, home: new THREE.Vector3(x, y, z), stickers: [] };
+          for (const normal of fourNormals(x, y, z)) {
+            const material = new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false, alphaTest: 0.28 });
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(FOUR_STICKER, FOUR_STICKER), material);
+            mesh.position.copy(normal).multiplyScalar(FOUR_LIFT);
+            aimPlane(mesh, normal);
+            group.add(mesh);
+            const sticker: StickerMesh = { mesh, material, normal, index: -1 };
+            cubie.stickers.push(sticker);
+            this.stickers.push(sticker);
+          }
+          this.cubies.push(cubie);
+          this.scene.add(group);
+        }
+      }
+    }
+  }
+
   private paint(facelets: string) {
-    const order = facelets.length === 150 ? 5 : facelets.length === 54 ? 3 : 0;
+    const order = facelets.length === 150 ? 5 : facelets.length === 96 ? 4 : facelets.length === 54 ? 3 : 0;
     if (!order) return;
-    const slots = order === 5 ? FIVE_SLOTS.map((slot) => ({ ...slot, pos: slot.grid })) : SLOTS;
+    const slots = order === 5 ? FIVE_SLOTS.map((slot) => ({ ...slot, pos: slot.grid })) : order === 4 ? FOUR_SLOTS.map((slot) => ({ ...slot, pos: slot.grid })) : SLOTS;
     for (const slot of slots) {
       const sticker = this.stickerAt(slot.pos, slot.normal);
       if (!sticker) continue;
@@ -347,7 +383,7 @@ export class CubeScene {
   private resetCubies() {
     for (const cubie of this.cubies) {
       this.scene.attach(cubie.mesh);
-      const pitch = this.order === 3 ? THREE_PITCH : FIVE_PITCH;
+      const pitch = this.order === 3 ? THREE_PITCH : this.order === 4 ? FOUR_PITCH : FIVE_PITCH;
       cubie.mesh.position.set(cubie.home.x * pitch, cubie.home.y * pitch, cubie.home.z * pitch);
       cubie.mesh.quaternion.identity();
       cubie.mesh.rotation.set(0, 0, 0);
@@ -510,8 +546,8 @@ export class CubeScene {
     this.dragging = false;
     if (!this.options.paintFace || dx * dx + dy * dy > 10 * 10) return;
     const index = this.pickIndex(event.clientX, event.clientY);
-    const stride = this.order === 5 ? 25 : 9;
-    const centre = this.order === 5 ? index !== null && index % 25 === 12 : index !== null && isCentre(index);
+    const stride = this.order === 5 ? 25 : this.order === 4 ? 16 : 9;
+    const centre = this.order === 4 ? false : this.order === 5 ? index !== null && index % 25 === 12 : index !== null && isCentre(index);
     if (index === null || centre) return;
     const faceIndex = "URFDLB".indexOf(this.options.paintFace);
     if (Math.floor(index / stride) !== faceIndex) return;
@@ -536,6 +572,18 @@ export class CubeScene {
   };
 
   private describeMove(move: string) {
+    if (this.order === 4 && parseFourMoveSafe(move)) {
+      const parsed = parseFourMove(move);
+      const axis: "x" | "y" | "z" = parsed.face === "R" || parsed.face === "L" ? "x" : parsed.face === "U" || parsed.face === "D" ? "y" : "z";
+      const sign = parsed.face === "D" || parsed.face === "L" || parsed.face === "B" ? -1 : 1;
+      const outer = 3 * sign;
+      const inner = sign;
+      const layers = parsed.wide ? [outer, inner] : [parsed.depth === 1 ? outer : inner];
+      const turns = parsed.quarters === 2 ? 2 : parsed.quarters === 3 ? 3 : 1;
+      const base = MOVE_ANGLE[parsed.face];
+      if (!base) return null;
+      return { axis, layer: (value: number) => layers.includes(value), angle: base.angle * turns };
+    }
     if (this.order === 5 && parseFiveMoveSafe(move)) {
       const parsed = parseFiveMove(move);
       const axis: "x" | "y" | "z" = parsed.face === "R" || parsed.face === "L" ? "x" : parsed.face === "U" || parsed.face === "D" ? "y" : "z";
@@ -549,6 +597,15 @@ export class CubeScene {
       return { axis, layer: (value: number) => layers.includes(value), angle: base.angle * turns };
     }
     return moveSpec(move);
+  }
+}
+
+function parseFourMoveSafe(move: string): boolean {
+  try {
+    parseFourMove(move);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -585,6 +642,17 @@ function aimPlane(mesh: THREE.Mesh, normal: THREE.Vector3) {
   else if (normal.x === 1) mesh.rotation.y = Math.PI / 2;
   else if (normal.x === -1) mesh.rotation.y = -Math.PI / 2;
   else if (normal.z === -1) mesh.rotation.y = Math.PI;
+}
+
+function fourNormals(x: number, y: number, z: number): THREE.Vector3[] {
+  const normals: THREE.Vector3[] = [];
+  if (x === 3) normals.push(new THREE.Vector3(1, 0, 0));
+  if (x === -3) normals.push(new THREE.Vector3(-1, 0, 0));
+  if (y === 3) normals.push(new THREE.Vector3(0, 1, 0));
+  if (y === -3) normals.push(new THREE.Vector3(0, -1, 0));
+  if (z === 3) normals.push(new THREE.Vector3(0, 0, 1));
+  if (z === -3) normals.push(new THREE.Vector3(0, 0, -1));
+  return normals;
 }
 
 function normalsFor(x: number, y: number, z: number, k = 1): THREE.Vector3[] {

@@ -1,5 +1,6 @@
+import { FOUR_SLOTS, fourOffset } from "../cube/four";
 import { FIVE_SLOTS, fiveOffset, solvedFiveString } from "../cube/five";
-import { FIVE_LIFT, FIVE_PITCH, THREE_LIFT } from "./metrics";
+import { FIVE_LIFT, FIVE_PITCH, FOUR_LIFT, FOUR_PITCH, THREE_LIFT } from "./metrics";
 import { type Face, type Vec, faceOffset, faceletsToString, solvedBytes, SLOTS } from "../cube/model";
 
 /** Unfilled sticker. Centres stay coloured so the hold is obvious. */
@@ -45,22 +46,32 @@ export function facePose(face: Face): { theta: number; phi: number } {
   }
 }
 
-export function faceletIndex(face: Face, row: number, col: number, order: 3 | 5 = 3): number {
-  const width = order === 5 ? 5 : 3;
-  const offset = order === 5 ? fiveOffset(face) : faceOffset(face);
-  return offset + row * width + col;
+export type PaintOrder = 3 | 4 | 5;
+
+function paintWidth(order: PaintOrder): number {
+  return order === 5 ? 5 : order === 4 ? 4 : 3;
 }
 
-export function isCentre(index: number, order: 3 | 5 = 3): boolean {
+function paintOffset(face: Face, order: PaintOrder): number {
+  return order === 5 ? fiveOffset(face) : order === 4 ? fourOffset(face) : faceOffset(face);
+}
+
+export function faceletIndex(face: Face, row: number, col: number, order: PaintOrder = 3): number {
+  return paintOffset(face, order) + row * paintWidth(order) + col;
+}
+
+export function isCentre(index: number, order: PaintOrder = 3): boolean {
+  if (order === 4) return false;
   return order === 5 ? index % 25 === 12 : index % 9 === 4;
 }
 
-export function paintableOnFace(order: 3 | 5 = 3): number {
-  return order === 5 ? 24 : 8;
+export function paintableOnFace(order: PaintOrder = 3): number {
+  return order === 5 ? 24 : order === 4 ? 16 : 8;
 }
 
-/** Solved centres, and a blank everywhere else. */
-export function blankPaint(order: 3 | 5 = 3): string {
+/** Solved centres, and a blank everywhere else. A 4×4 has no fixed centre, so every sticker starts blank. */
+export function blankPaint(order: PaintOrder = 3): string {
+  if (order === 4) return BLANK.repeat(96);
   const solved = order === 5 ? solvedFiveString() : faceletsToString(solvedBytes());
   return [...solved].map((letter, index) => (isCentre(index, order) ? letter : BLANK)).join("");
 }
@@ -71,8 +82,8 @@ export function blankCount(cells: string): number {
 
 /** First paint face that still has an unfilled sticker. */
 export function firstBlankFace(cells: string): Face | null {
-  const order = cells.length === 150 ? 5 : 3;
-  const width = order === 5 ? 5 : 3;
+  const order = paintOrder(cells);
+  const width = paintWidth(order);
   for (const face of PAINT_FACES) {
     for (let row = 0; row < width; row += 1) {
       for (let col = 0; col < width; col += 1) {
@@ -86,8 +97,8 @@ export function firstBlankFace(cells: string): Face | null {
 
 /** How many paintable stickers on this face have a colour. */
 export function filledOnFace(cells: string, face: Face): number {
-  const order = cells.length === 150 ? 5 : 3;
-  const width = order === 5 ? 5 : 3;
+  const order = paintOrder(cells);
+  const width = paintWidth(order);
   let filled = 0;
   for (let row = 0; row < width; row += 1) {
     for (let col = 0; col < width; col += 1) {
@@ -108,13 +119,26 @@ export function faceAfterFailedDone(cells: string): Face {
   return "F";
 }
 
-export function faceOfIndex(index: number, order: 3 | 5 = 3): Face {
-  const stride = order === 5 ? 25 : 9;
+export function faceOfIndex(index: number, order: PaintOrder = 3): Face {
+  const stride = order === 5 ? 25 : order === 4 ? 16 : 9;
   return (["U", "R", "F", "D", "L", "B"] as const)[Math.floor(index / stride)] ?? "F";
 }
 
+function paintOrder(cells: string): PaintOrder {
+  return cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3;
+}
+
 /** World position of the sticker plane used by the renderer. */
-export function stickerPoint(face: Face, row: number, col: number, order: 3 | 5 = 3): Vec {
+export function stickerPoint(face: Face, row: number, col: number, order: PaintOrder = 3): Vec {
+  if (order === 4) {
+    const slot = FOUR_SLOTS.find((item) => item.face === face && item.row === row && item.col === col);
+    if (!slot) throw new Error(`No sticker at ${face} ${row},${col}`);
+    return {
+      x: slot.grid.x * FOUR_PITCH + slot.normal.x * FOUR_LIFT,
+      y: slot.grid.y * FOUR_PITCH + slot.normal.y * FOUR_LIFT,
+      z: slot.grid.z * FOUR_PITCH + slot.normal.z * FOUR_LIFT,
+    };
+  }
   if (order === 5) {
     const slot = FIVE_SLOTS.find((item) => item.face === face && item.row === row && item.col === col);
     if (!slot) throw new Error(`No sticker at ${face} ${row},${col}`);

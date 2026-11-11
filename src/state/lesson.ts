@@ -1,3 +1,4 @@
+import { applyFourString } from "../cube/four";
 import { applyFiveString } from "../cube/five";
 import { applyMoves, faceletsToString, stringToFacelets } from "../cube/model";
 import type { Solution, TeachingChunk } from "../solver/beginner";
@@ -51,6 +52,7 @@ export function currentFacelets(lesson: Lesson): string {
   const moves = lesson.moves.slice(0, lesson.cursor);
   if (lesson.pending) moves.push(lesson.pending.move);
   if (lesson.start.length === 150) return applyFiveString(lesson.start, moves);
+  if (lesson.start.length === 96) return applyFourString(lesson.start, moves);
   return faceletsToString(applyMoves(stringToFacelets(lesson.start), moves));
 }
 
@@ -265,9 +267,10 @@ export function solvingHeadline(method: "beginner" | "expert", stageStep: string
 
 export function applyUserMove(facelets: string, move: string): string {
   if (facelets.length === 150) return applyFiveString(facelets, [move]);
+  if (facelets.length === 96) return applyFourString(facelets, [move]);
   return faceletsToString(applyMoves(stringToFacelets(facelets), [move]));
 }
 
 export function sameBytes(left: string, right: string): boolean {
-  return left === right && (left.length === 54 || left.length === 150);
+  return left === right && (left.length === 54 || left.length === 96 || left.length === 150);
 }
