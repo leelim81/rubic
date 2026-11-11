@@ -5,7 +5,8 @@ import { BLANK, isCentre } from "./paint";
 import { SLOTS } from "../cube/model";
 import { cameraDistance, HOME_PHI, HOME_THETA, orbitBy, viewIsShifted } from "./camera";
 import { FIVE_BODY, FIVE_LIFT, FIVE_PITCH, FIVE_STICKER, THREE_BODY, THREE_LIFT, THREE_PITCH, THREE_STICKER } from "./metrics";
-import { LABEL_HALO, LABEL_INK, STICKER_HEX, STICKER_MARK } from "./contrast";
+import { STICKER_MARK } from "./contrast";
+import { displaySwatch, getPalette, subscribePalette } from "./palette";
 
 const MOVE_ANGLE: Record<string, { axis: "x" | "y" | "z"; layer: (value: number) => boolean; angle: number }> = {
   U: { axis: "y", layer: (value) => value === 1, angle: -Math.PI / 2 },
@@ -75,6 +76,7 @@ export class CubeScene {
   private resizeObserver: ResizeObserver;
   private textures = new Map<string, THREE.CanvasTexture>();
   private blankMap: THREE.CanvasTexture | null = null;
+  private unsubscribePalette: () => void = () => {};
 
   constructor(private canvas: HTMLCanvasElement, options: CubeSceneOptions) {
     this.options = options;
@@ -107,6 +109,7 @@ export class CubeScene {
     this.canvas.addEventListener("pointermove", this.onMove, { passive: false });
     this.canvas.addEventListener("pointerup", this.onUp);
     this.canvas.addEventListener("pointercancel", this.onCancel);
+    this.unsubscribePalette = subscribePalette(this.onPalette);
     this.frame = requestAnimationFrame(this.loop);
   }
 
@@ -186,6 +189,7 @@ export class CubeScene {
 
   dispose() {
     this.disposed = true;
+    this.unsubscribePalette();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.canvas.removeEventListener("pointerdown", this.onDown);
@@ -271,7 +275,7 @@ export class CubeScene {
         sticker.material.color.set(onCurrent ? "#ffffff" : "#6a645c");
         sticker.material.map = this.texture(name, highlighted);
       } else {
-        sticker.material.color.set(STICKER_HEX[name]);
+        sticker.material.color.set(displaySwatch(name).hex);
         if (!onCurrent) sticker.material.color.multiplyScalar(0.55);
         sticker.material.map = null;
       }
@@ -300,8 +304,18 @@ export class CubeScene {
     return texture;
   }
 
+  private onPalette = () => {
+    const stale = [...this.textures.values()];
+    this.textures.clear();
+    if (this.facelets) this.paint(this.facelets);
+    for (const texture of stale) texture.dispose();
+    if (!this.disposed) this.renderer.render(this.scene, this.camera);
+  };
+
   private texture(color: ColorName, highlighted: boolean) {
-    const key = `${color}-${highlighted}-${this.options.letters}`;
+    const palette = getPalette();
+    const swatch = displaySwatch(color, palette);
+    const key = `${palette}-${color}-${highlighted}-${this.options.letters}`;
     const cached = this.textures.get(key);
     if (cached) return cached;
     const canvas = document.createElement("canvas");
@@ -311,11 +325,11 @@ export class CubeScene {
     if (!context) return null;
     context.clearRect(0, 0, 128, 128);
     traceRound(context, 6, 6, 116, 116, 26);
-    context.fillStyle = STICKER_HEX[color];
+    context.fillStyle = swatch.hex;
     context.fill();
     context.clip();
     if (highlighted) {
-      context.strokeStyle = LABEL_INK[color];
+      context.strokeStyle = swatch.ink;
       context.lineWidth = 8;
       context.strokeRect(8, 8, 112, 112);
     }
@@ -325,12 +339,12 @@ export class CubeScene {
     context.lineJoin = "round";
     context.miterLimit = 2;
     context.lineWidth = 16;
-    context.strokeStyle = LABEL_HALO[color];
+    context.strokeStyle = swatch.halo;
     context.strokeText(STICKER_MARK[color], 64, 70);
     context.lineWidth = 6;
-    context.strokeStyle = LABEL_INK[color];
+    context.strokeStyle = swatch.ink;
     context.strokeText(STICKER_MARK[color], 64, 70);
-    context.fillStyle = LABEL_INK[color];
+    context.fillStyle = swatch.ink;
     context.fillText(STICKER_MARK[color], 64, 70);
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;

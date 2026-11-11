@@ -6,7 +6,9 @@ import "@fontsource/inter/700.css";
 import "./styles.css";
 import { App } from "./App";
 import { mountSiteFooter } from "./siteFooter";
+import { applyPalette } from "./view/palette";
 
+applyPalette();
 mountSiteFooter();
 
 const root = document.getElementById("root");
