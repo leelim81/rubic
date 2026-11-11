@@ -2,12 +2,14 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import * as esbuild from "esbuild";
 import { applyFourString, randomFourScramble, solvedFourString } from "../src/cube/four";
 import { mulberry32 } from "../src/cube/model";
+import { batchCount, seedChunks } from "./batchSize";
 
-const SOLVES = Number(process.env.FOUR_SOLVES || 1000);
+const SOLVES = batchCount("FOUR_SOLVES", 1000);
+const CHUNK = 20;
 
 interface Reply {
   ok: boolean;
@@ -17,9 +19,11 @@ interface Reply {
 }
 
 describe("4×4 random solves", () => {
-  it(`solves ${SOLVES} seeded length-40 scrambles`, async () => {
+  let outfile = "";
+
+  beforeAll(async () => {
     const dir = mkdtempSync(join(tmpdir(), "four-solve-"));
-    const outfile = join(dir, "worker.mjs");
+    outfile = join(dir, "worker.mjs");
     await esbuild.build({
       entryPoints: [join(process.cwd(), "tests/four.worker.ts")],
       bundle: true,
@@ -28,19 +32,16 @@ describe("4×4 random solves", () => {
       outfile,
       logLevel: "silent",
     });
-    // One worker keeps the test process free to answer Vitest while the solves run.
-    const workers = 1;
-    const pool = Array.from({ length: workers }, () => createSolver(outfile));
-    const lengths: number[] = [];
-    const times: number[] = [];
-    let next = 1;
-    async function run() {
-      const solver = pool.pop();
-      if (!solver) return;
+  });
+
+  for (const [from, to] of seedChunks(SOLVES, CHUNK)) {
+    it(`solves seeded length-40 scrambles ${from}–${to}`, async () => {
+      // One worker keeps the test process free to answer Vitest while the solves run.
+      const solver = createSolver(outfile);
+      const lengths: number[] = [];
+      const times: number[] = [];
       try {
-        while (next <= SOLVES) {
-          const seed = next;
-          next += 1;
+        for (let seed = from; seed <= to; seed += 1) {
           const scramble = randomFourScramble(mulberry32(seed), 40);
           const text = applyFourString(solvedFourString(), scramble);
           const reply = await solver.solve(text);
@@ -53,18 +54,17 @@ describe("4×4 random solves", () => {
       } finally {
         await solver.close();
       }
-    }
-    await Promise.all(Array.from({ length: workers }, () => run()));
-    lengths.sort((a, b) => a - b);
-    times.sort((a, b) => a - b);
-    const mean = (values: number[]) => Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
-    console.log(JSON.stringify({
-      solves: SOLVES,
-      moves: { min: lengths[0], mean: mean(lengths), max: lengths.at(-1) },
-      ms: { min: times[0], mean: mean(times), max: times.at(-1) },
-    }));
-    expect(lengths).toHaveLength(SOLVES);
-  }, 90 * 60 * 1000);
+      lengths.sort((a, b) => a - b);
+      times.sort((a, b) => a - b);
+      const mean = (values: number[]) => Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+      console.log(JSON.stringify({
+        solves: lengths.length,
+        moves: { min: lengths[0], mean: mean(lengths), max: lengths.at(-1) },
+        ms: { min: times[0], mean: mean(times), max: times.at(-1) },
+      }));
+      expect(lengths).toHaveLength(to - from + 1);
+    }, 90 * 60 * 1000);
+  }
 });
 
 function createSolver(outfile: string) {

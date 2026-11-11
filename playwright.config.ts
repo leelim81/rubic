@@ -5,13 +5,17 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // A four-core runner defaults to two workers. Three overlaps the long
+  // animations and leaves a core for the preview server.
+  workers: process.env.CI ? 3 : undefined,
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:4173/rubic/",
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npm run build && npm run preview",
+    // CI builds once in the workflow and reuses that dist. Local runs build here.
+    command: process.env.CI ? "npm run preview" : "npm run build && npm run preview",
     url: "http://127.0.0.1:4173/rubic/",
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

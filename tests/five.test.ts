@@ -165,7 +165,7 @@ describe("5×5 reduction solver", () => {
     expectSolved("parity", parity);
   }, 5 * 60 * 1000);
 
-  it(`solves ${SMOKE} seeded scrambles and the simulator agrees`, () => {
+  it(`solves ${SMOKE} seeded scrambles and the simulator agrees`, async () => {
     const lengths: number[] = [];
     const times: number[] = [];
     for (let seed = 1; seed <= SMOKE; seed += 1) {
@@ -173,6 +173,7 @@ describe("5×5 reduction solver", () => {
       const stats = expectSolved(`seed ${seed}`, text);
       lengths.push(stats.moves);
       times.push(stats.ms);
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
     lengths.sort((a, b) => a - b);
     times.sort((a, b) => a - b);

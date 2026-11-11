@@ -9,8 +9,8 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     globals: false,
     testTimeout: 30_000,
-    // The 5×5 batch uses its own worker threads. Running other files beside it
-    // oversubscribes a two-core CI runner and blows the batch timeout.
+    // The full 4×4 and 5×5 batches spawn worker threads. One file at a time
+    // keeps a small CI runner from oversubscribing and blowing the batch timeout.
     fileParallelism: false,
   },
   build: {

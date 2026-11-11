@@ -37,16 +37,19 @@ Open `http://127.0.0.1:5173/rubic/`. The dev server uses the same `/rubic/` base
 
 ```bash
 npm test
+npm run test:batch
 npm run build
 npm run preview
 npm run test:e2e
 ```
 
-`npm test` covers moves and their inverses, four quarter turns, random legal scrambles, cubie/facelet agreement, impossible cubes (counts, parity, flips, twists, mirror centres), the beginner solver on scrambles and arbitrary legal states, scan orientation, and synthetic colour fixtures.
+`npm test` covers moves and their inverses, four quarter turns, random legal scrambles, cubie/facelet agreement, impossible cubes (counts, parity, flips, twists, mirror centres), the beginner solver on scrambles and arbitrary legal states, scan orientation, and synthetic colour fixtures. Each large seeded batch keeps a 16-solve sample that still applies the solution and checks the cube is solved. `npm run test:batch` (`FULL_BATCH=1`) restores the full batches: 1,000 4×4 solves, 1,000 5×5 solves, 200 Megaminx solves, 200 Master Pyraminx solves, 100 gullicube solves, and 2,000 beginner legal cubes. Pyraminx optimality, including the 300-solve check, stays in `npm test`.
 
 ## Deploy
 
-Push to `main` runs `.github/workflows/pages.yml`, which tests, builds, and deploys with GitHub Actions. The repository Pages source is **GitHub Actions**. The public site is https://leelim81.github.io/rubic/.
+Push to `main` runs `.github/workflows/pages.yml`. Unit tests run beside the build. Desktop and mobile browser tests reuse that build, and the deploy publishes it. The repository Pages source is **GitHub Actions**. The public site is https://leelim81.github.io/rubic/.
+
+`.github/workflows/batch.yml` runs `npm run test:batch` on a nightly schedule and when started by hand. It does not deploy.
 
 ## Licence
 

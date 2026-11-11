@@ -10,13 +10,16 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write
 
+# Main deploys share one queue so a later push cannot overtake an earlier one.
+# Pull requests use a separate group and do not block a deploy already queued on main.
 concurrency:
-  group: pages
+  group: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'pages' || format('pages-{0}', github.ref) }}
   cancel-in-progress: false
 
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -26,17 +29,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
 
-  deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: test
+  build:
     runs-on: ubuntu-24.04
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,8 +40,84 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 1
+          if-no-files-found: error
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+
+  e2e:
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, mobile]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Check downloaded build
+        run: test -f dist/index.html
+      - name: Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+      - name: Install Playwright Chromium
+        run: |
+          attempt=1
+          max=3
+          until npx playwright install chromium; do
+            if [ "$attempt" -ge "$max" ]; then
+              echo "Playwright browser download failed after ${max} attempts"
+              exit 1
+            fi
+            echo "Playwright browser download failed (attempt ${attempt}/${max}); retrying"
+            attempt=$((attempt + 1))
+            sleep $((attempt * 5))
+          done
+          # ubuntu-24.04 already has Chromium's shared libraries. install-deps
+          # also fetches fonts, and that apt step is what fails when DNS blips.
+          if node --input-type=module -e "import { chromium } from '@playwright/test'; const browser = await chromium.launch(); await browser.close();"; then
+            echo "Chromium starts with the libraries already on this runner"
+          else
+            echo "Chromium did not start; installing system libraries"
+            deps=1
+            until npx playwright install-deps chromium; do
+              if [ "$deps" -ge 2 ]; then
+                echo "Playwright system libraries failed"
+                exit 1
+              fi
+              echo "System library install failed (attempt ${deps}/2); retrying"
+              deps=$((deps + 1))
+              sleep 10
+            done
+            node --input-type=module -e "import { chromium } from '@playwright/test'; const browser = await chromium.launch(); await browser.close();"
+          fi
+      - run: npm run test:e2e -- --project=${{ matrix.project }}
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [unit, build, e2e]
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
