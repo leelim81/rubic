@@ -5,6 +5,7 @@ import { COLORS, type ColorName, applyMoves, centerColor, faceletsToString, move
 import { PAINT_FACES, PAINT_GUIDE, blankCount, blankMessage, blankPaint, faceAfterFailedDone, facePose, filledOnFace, faceletIndex, isCentre, paintableOnFace, paintErrorMessage } from "./view/paint";
 import { playPaintError } from "./view/paintSound";
 import { STICKER_MARK } from "./view/contrast";
+import { PaletteToggle } from "./view/PaletteToggle";
 import { validateFaceletString } from "./cube/validate";
 import { solveInWorker, type SolveMethod } from "./solveClient";
 import { DECLINED_KEY, SolveStopped, gullicubeBlocked, rememberGullicubeFailure, retryGullicube, solveShorter, type WorkerLike } from "./gullicube/client";
@@ -672,6 +673,7 @@ export function App() {
               <button type="button" onClick={() => void run(() => replayMove())} disabled={running || lesson.busy || loading || (!nextMove && lesson.cursor === 0)}>Replay move</button>
               <button type="button" onClick={() => cubeRef.current?.resetView()}>Reset view</button>
             </div>
+            <PaletteToggle />
             <label className="check">
               <input type="checkbox" checked={letters} onChange={(event) => setLetters(event.target.checked)} />
               Letter stickers (W Y R O B G) as well as colour
