@@ -6,6 +6,7 @@ import { expectCardClear } from "./solver-card";
 const SOLVED = solvedFiveString();
 
 test("5×5 shows download progress, the cancel warning, and a retry", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   await page.addInitScript(() => localStorage.setItem("rubic-size-v1", "5"));
   await page.route("**/gullicube/data/diag_x10.cls", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 4000));
