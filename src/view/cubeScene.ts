@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { type ColorName, type Face, FACES, faceOffset, LETTER_COLOR } from "../cube/model";
 import { FIVE_SLOTS, parseFiveMove } from "../cube/five";
-import { PYRA_MESH, pyraAnim, pyraBodyTriangles, pyraFaceOf, type Vec as PyraVec } from "../pyraminx/model";
+import { MASTER_MESH, masterAnim } from "../pyraminx/master";
+import { PYRA_MESH, pyraAnim, pyraBodyTriangles, type PyraSticker, type Vec as PyraVec } from "../pyraminx/model";
 import { BLANK, isCentre } from "./paint";
 import { SLOTS } from "../cube/model";
 import { cameraDistance, HOME_PHI, HOME_THETA, orbitBy, viewIsShifted } from "./camera";
@@ -75,6 +76,7 @@ export class CubeScene {
   private options: CubeSceneOptions;
   private order: 3 | 5 = 3;
   private pyra = false;
+  private tetra: 36 | 64 | 0 = 0;
   private pyraBody: THREE.Mesh | null = null;
   private resizeObserver: ResizeObserver;
   private textures = new Map<string, THREE.CanvasTexture>();
@@ -120,13 +122,15 @@ export class CubeScene {
   }
 
   setFacelets(facelets: string) {
-    const pyra = facelets.length === 36;
+    const tetra = facelets.length === 64 ? 64 : facelets.length === 36 ? 36 : 0;
     const order = facelets.length === 150 ? 5 : 3;
-    if (pyra !== this.pyra || (!pyra && order !== this.order)) {
-      this.pyra = pyra;
-      if (!pyra) this.order = order;
+    if (tetra !== this.tetra || (tetra === 0 && order !== this.order)) {
+      this.tetra = tetra;
+      this.pyra = tetra !== 0;
+      if (!this.pyra) this.order = order;
       this.clearCubies();
-      if (pyra) this.buildPyraminx();
+      if (tetra === 64) this.buildPyraminx(MASTER_MESH);
+      else if (tetra === 36) this.buildPyraminx(PYRA_MESH);
       else this.buildCubies();
     }
     this.facelets = facelets;
@@ -223,7 +227,7 @@ export class CubeScene {
     this.stickers = [];
   }
 
-  private buildPyraminx() {
+  private buildPyraminx(stickers: PyraSticker[]) {
     const body = pyraBodyTriangles();
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(body.positions, 3));
@@ -235,7 +239,7 @@ export class CubeScene {
     );
     this.scene.add(this.pyraBody);
     const groups = new Map<string, THREE.Group>();
-    for (const sticker of PYRA_MESH) {
+    for (const sticker of stickers) {
       let group = groups.get(sticker.piece);
       if (!group) {
         group = new THREE.Group();
@@ -253,11 +257,16 @@ export class CubeScene {
     }
   }
 
+  private tetraFace(index: number): string {
+    const stride = this.tetra === 64 ? 16 : 9;
+    return ["F", "R", "L", "D"][Math.floor(index / stride)] ?? "F";
+  }
+
   private paintPyra(facelets: string) {
-    if (facelets.length !== 36) return;
+    if (facelets.length !== 36 && facelets.length !== 64) return;
     for (const sticker of this.stickers) {
       const letter = facelets[sticker.index] ?? "";
-      const onCurrent = !this.options.paintFace || pyraFaceOf(sticker.index) === this.options.paintFace;
+      const onCurrent = !this.options.paintFace || this.tetraFace(sticker.index) === this.options.paintFace;
       const highlighted = this.highlight.has(sticker.index);
       if (letter === BLANK) {
         sticker.material.color.set(onCurrent ? "#ffffff" : "#5a554c");
@@ -281,7 +290,7 @@ export class CubeScene {
   }
 
   private async animatePyra(move: string, nextFacelets?: string, durationMs?: number): Promise<boolean> {
-    const spec = pyraAnim(move);
+    const spec = this.tetra === 64 ? masterAnim(move) : pyraAnim(move);
     const settle = nextFacelets || this.facelets;
     const token = this.generation;
     if (!spec || this.options.reducedMotion) {
@@ -648,7 +657,7 @@ export class CubeScene {
     if (!this.options.paintFace || dx * dx + dy * dy > 10 * 10) return;
     const index = this.pickIndex(event.clientX, event.clientY);
     if (this.pyra) {
-      if (index === null || pyraFaceOf(index) !== this.options.paintFace) return;
+      if (index === null || this.tetraFace(index) !== this.options.paintFace) return;
       this.options.onPaint?.(index);
       return;
     }

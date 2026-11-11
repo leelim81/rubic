@@ -112,7 +112,7 @@ function centroid(verts: [Vec, Vec, Vec]): Vec {
 }
 
 /** One clockwise step around an outward axis. Two steps is the anticlockwise turn. */
-function rotateSteps(p: Vec, axis: Vec, steps: 1 | 2): Vec {
+export function rotateSteps(p: Vec, axis: Vec, steps: 1 | 2): Vec {
   const c = -0.5;
   const s = steps === 1 ? -Math.sqrt(3) / 2 : Math.sqrt(3) / 2;
   const d = dot(axis, p);
