@@ -48,7 +48,7 @@ describe("megaminx random solves", () => {
           expect(applyMegaString(text, reply.moves ?? []), `seed ${seed}`).toBe(SOLVED);
           const length = reply.moves?.length ?? 0;
           expect(length, `seed ${seed}`).toBeGreaterThan(0);
-          expect(length, `seed ${seed}`).toBeLessThan(600);
+          expect(length, `seed ${seed}`).toBeLessThan(250);
           lengths.push(length);
           times.push(reply.ms);
           if (seed % 25 === 0) console.log(`megaminx solves ${seed}/${SOLVES}`);
@@ -68,7 +68,8 @@ describe("megaminx random solves", () => {
       ms: { min: times[0], mean: mean(times), max: times.at(-1) },
     }));
     expect(lengths).toHaveLength(SOLVES);
-    expect(mean(lengths)).toBeLessThan(550);
+    expect(mean(lengths)).toBeLessThan(200);
+    expect(mean(times)).toBeLessThan(5_000);
   }, 40 * 60 * 1000);
 });
 
