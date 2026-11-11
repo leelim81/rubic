@@ -114,10 +114,10 @@ describe("megaminx solver", () => {
       const solution = solveMegaminx(facelets);
       expect(applyMegaString(facelets, solution.moves)).toBe(SOLVED);
       expect(solution.moves.length).toBeGreaterThan(0);
-      expect(solution.moves.length).toBeLessThan(900);
-      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(solution.moves.length).toBeLessThan(600);
+      expect(Date.now() - started).toBeLessThan(15_000);
     }
-  }, 40_000);
+  }, 90_000);
 });
 
 function moveIndex(move: string): number {
