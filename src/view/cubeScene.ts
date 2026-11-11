@@ -2,11 +2,14 @@ import * as THREE from "three";
 import { type ColorName, type Face, FACES, faceOffset, LETTER_COLOR } from "../cube/model";
 import { FIVE_SLOTS, parseFiveMove } from "../cube/five";
 import { FOUR_SLOTS, parseFourMove } from "../cube/four";
+import { MASTER_MESH, masterAnim } from "../pyraminx/master";
+import { PYRA_MESH, pyraAnim, pyraBodyTriangles, type PyraSticker, type Vec as PyraVec } from "../pyraminx/model";
 import { BLANK, isCentre } from "./paint";
 import { SLOTS } from "../cube/model";
 import { cameraDistance, HOME_PHI, HOME_THETA, orbitBy, viewIsShifted } from "./camera";
 import { FIVE_BODY, FIVE_LIFT, FIVE_PITCH, FIVE_STICKER, FOUR_BODY, FOUR_LIFT, FOUR_PITCH, FOUR_STICKER, THREE_BODY, THREE_LIFT, THREE_PITCH, THREE_STICKER } from "./metrics";
-import { LABEL_HALO, LABEL_INK, STICKER_HEX, STICKER_MARK } from "./contrast";
+import { STICKER_MARK } from "./contrast";
+import { displaySwatch, getPalette, subscribePalette } from "./palette";
 
 const MOVE_ANGLE: Record<string, { axis: "x" | "y" | "z"; layer: (value: number) => boolean; angle: number }> = {
   U: { axis: "y", layer: (value) => value === 1, angle: -Math.PI / 2 },
@@ -31,6 +34,7 @@ interface Cubie {
   mesh: THREE.Group;
   home: THREE.Vector3;
   stickers: StickerMesh[];
+  id?: string;
 }
 
 export type CubeGesture = "view" | "turn" | "off";
@@ -73,9 +77,13 @@ export class CubeScene {
   private idleStamp = 0;
   private options: CubeSceneOptions;
   private order: 3 | 4 | 5 = 3;
+  private pyra = false;
+  private tetra: 36 | 64 | 0 = 0;
+  private pyraBody: THREE.Mesh | null = null;
   private resizeObserver: ResizeObserver;
   private textures = new Map<string, THREE.CanvasTexture>();
   private blankMap: THREE.CanvasTexture | null = null;
+  private unsubscribePalette: () => void = () => {};
 
   constructor(private canvas: HTMLCanvasElement, options: CubeSceneOptions) {
     this.options = options;
@@ -108,6 +116,7 @@ export class CubeScene {
     this.canvas.addEventListener("pointermove", this.onMove, { passive: false });
     this.canvas.addEventListener("pointerup", this.onUp);
     this.canvas.addEventListener("pointercancel", this.onCancel);
+    this.unsubscribePalette = subscribePalette(this.onPalette);
     this.frame = requestAnimationFrame(this.loop);
   }
 
@@ -117,11 +126,16 @@ export class CubeScene {
   }
 
   setFacelets(facelets: string) {
+    const tetra = facelets.length === 64 ? 64 : facelets.length === 36 ? 36 : 0;
     const order = facelets.length === 150 ? 5 : facelets.length === 96 ? 4 : 3;
-    if (order !== this.order) {
-      this.order = order;
+    if (tetra !== this.tetra || (tetra === 0 && order !== this.order)) {
+      this.tetra = tetra;
+      this.pyra = tetra !== 0;
+      if (!this.pyra) this.order = order;
       this.clearCubies();
-      this.buildCubies();
+      if (tetra === 64) this.buildPyraminx(MASTER_MESH);
+      else if (tetra === 36) this.buildPyraminx(PYRA_MESH);
+      else this.buildCubies();
     }
     this.facelets = facelets;
     if (this.animating) return;
@@ -136,6 +150,7 @@ export class CubeScene {
   }
 
   async animateMove(move: string, nextFacelets?: string, durationMs?: number): Promise<boolean> {
+    if (this.pyra) return this.animatePyra(move, nextFacelets, durationMs);
     const spec = this.describeMove(move);
     const settle = nextFacelets || this.facelets;
     const token = this.generation;
@@ -187,6 +202,7 @@ export class CubeScene {
 
   dispose() {
     this.disposed = true;
+    this.unsubscribePalette();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.canvas.removeEventListener("pointerdown", this.onDown);
@@ -199,6 +215,12 @@ export class CubeScene {
   }
 
   private clearCubies() {
+    if (this.pyraBody) {
+      this.pyraBody.removeFromParent();
+      this.pyraBody.geometry.dispose();
+      (this.pyraBody.material as THREE.Material).dispose();
+      this.pyraBody = null;
+    }
     for (const cubie of this.cubies) {
       cubie.mesh.removeFromParent();
       cubie.mesh.traverse((child) => {
@@ -208,6 +230,123 @@ export class CubeScene {
     }
     this.cubies = [];
     this.stickers = [];
+  }
+
+  private buildPyraminx(stickers: PyraSticker[]) {
+    const body = pyraBodyTriangles();
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(body.positions, 3));
+    geometry.setIndex(body.indices);
+    geometry.computeVertexNormals();
+    this.pyraBody = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({ color: "#07070b", roughness: 0.38, metalness: 0.18, side: THREE.FrontSide }),
+    );
+    this.scene.add(this.pyraBody);
+    const groups = new Map<string, THREE.Group>();
+    for (const sticker of stickers) {
+      let group = groups.get(sticker.piece);
+      if (!group) {
+        group = new THREE.Group();
+        groups.set(sticker.piece, group);
+        this.scene.add(group);
+        this.cubies.push({ mesh: group, home: new THREE.Vector3(), stickers: [], id: sticker.piece });
+      }
+      const material = new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(triangleGeometry(sticker.verts), material);
+      group.add(mesh);
+      const drawn: StickerMesh = { mesh, material, normal: new THREE.Vector3(sticker.normal.x, sticker.normal.y, sticker.normal.z), index: sticker.index };
+      const cubie = this.cubies.find((item) => item.id === sticker.piece);
+      cubie?.stickers.push(drawn);
+      this.stickers.push(drawn);
+    }
+  }
+
+  private tetraFace(index: number): string {
+    const stride = this.tetra === 64 ? 16 : 9;
+    return ["F", "R", "L", "D"][Math.floor(index / stride)] ?? "F";
+  }
+
+  private paintPyra(facelets: string) {
+    if (facelets.length !== 36 && facelets.length !== 64) return;
+    for (const sticker of this.stickers) {
+      const letter = facelets[sticker.index] ?? "";
+      const onCurrent = !this.options.paintFace || this.tetraFace(sticker.index) === this.options.paintFace;
+      const highlighted = this.highlight.has(sticker.index);
+      if (letter === BLANK) {
+        sticker.material.color.set(onCurrent ? "#ffffff" : "#5a554c");
+        sticker.material.map = this.blankTexture();
+        sticker.material.needsUpdate = true;
+        continue;
+      }
+      const name = LETTER_COLOR[letter];
+      if (!name) continue;
+      const showLetter = this.options.letters || highlighted;
+      if (showLetter) {
+        sticker.material.color.set(onCurrent ? "#ffffff" : "#6a645c");
+        sticker.material.map = this.texture(name, highlighted);
+      } else {
+        sticker.material.color.set(displaySwatch(name).hex);
+        if (!onCurrent) sticker.material.color.multiplyScalar(0.55);
+        sticker.material.map = null;
+      }
+      sticker.material.needsUpdate = true;
+    }
+  }
+
+  private async animatePyra(move: string, nextFacelets?: string, durationMs?: number): Promise<boolean> {
+    const spec = this.tetra === 64 ? masterAnim(move) : pyraAnim(move);
+    const settle = nextFacelets || this.facelets;
+    const token = this.generation;
+    if (!spec || this.options.reducedMotion) {
+      if (this.generation !== token) return false;
+      if (settle) this.setFacelets(settle);
+      return this.generation === token;
+    }
+    this.animating = true;
+    const pivot = new THREE.Group();
+    this.activePivot = pivot;
+    this.scene.add(pivot);
+    const moving = new Set(spec.pieces);
+    for (const cubie of this.cubies) {
+      if (cubie.id && moving.has(cubie.id)) pivot.attach(cubie.mesh);
+    }
+    const finished = await this.tweenAxis(pivot, new THREE.Vector3(spec.axis.x, spec.axis.y, spec.axis.z), spec.angle, durationMs, token);
+    if (!finished || this.generation !== token) {
+      this.animating = false;
+      return false;
+    }
+    this.scene.remove(pivot);
+    this.activePivot = null;
+    this.activeAxis = null;
+    this.resetCubies();
+    if (settle) this.facelets = settle;
+    if (this.facelets) this.paint(this.facelets);
+    this.animating = false;
+    this.renderer.render(this.scene, this.camera);
+    return true;
+  }
+
+  private tweenAxis(pivot: THREE.Group, axis: THREE.Vector3, angle: number, durationMs: number | undefined, token: number) {
+    const duration = durationMs ?? Math.max(160, this.options.turnMs ?? 750);
+    const start = performance.now();
+    const turn = new THREE.Quaternion();
+    return new Promise<boolean>((resolve) => {
+      const step = (now: number) => {
+        if (this.generation !== token || this.disposed) {
+          resolve(false);
+          return;
+        }
+        const t = Math.min(1, (now - start) / duration);
+        const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+        turn.setFromAxisAngle(axis, angle * eased);
+        pivot.quaternion.copy(turn);
+        this.renderer.render(this.scene, this.camera);
+        if (t < 1) requestAnimationFrame(step);
+        else resolve(true);
+      };
+      requestAnimationFrame(step);
+    });
   }
 
   private buildCubies() {
@@ -283,6 +422,10 @@ export class CubeScene {
   }
 
   private paint(facelets: string) {
+    if (this.pyra) {
+      this.paintPyra(facelets);
+      return;
+    }
     const order = facelets.length === 150 ? 5 : facelets.length === 96 ? 4 : facelets.length === 54 ? 3 : 0;
     if (!order) return;
     const slots = order === 5 ? FIVE_SLOTS.map((slot) => ({ ...slot, pos: slot.grid })) : order === 4 ? FOUR_SLOTS.map((slot) => ({ ...slot, pos: slot.grid })) : SLOTS;
@@ -307,7 +450,7 @@ export class CubeScene {
         sticker.material.color.set(onCurrent ? "#ffffff" : "#6a645c");
         sticker.material.map = this.texture(name, highlighted);
       } else {
-        sticker.material.color.set(STICKER_HEX[name]);
+        sticker.material.color.set(displaySwatch(name).hex);
         if (!onCurrent) sticker.material.color.multiplyScalar(0.55);
         sticker.material.map = null;
       }
@@ -336,8 +479,18 @@ export class CubeScene {
     return texture;
   }
 
+  private onPalette = () => {
+    const stale = [...this.textures.values()];
+    this.textures.clear();
+    if (this.facelets) this.paint(this.facelets);
+    for (const texture of stale) texture.dispose();
+    if (!this.disposed) this.renderer.render(this.scene, this.camera);
+  };
+
   private texture(color: ColorName, highlighted: boolean) {
-    const key = `${color}-${highlighted}-${this.options.letters}`;
+    const palette = getPalette();
+    const swatch = displaySwatch(color, palette);
+    const key = `${palette}-${color}-${highlighted}-${this.options.letters}`;
     const cached = this.textures.get(key);
     if (cached) return cached;
     const canvas = document.createElement("canvas");
@@ -347,11 +500,11 @@ export class CubeScene {
     if (!context) return null;
     context.clearRect(0, 0, 128, 128);
     traceRound(context, 6, 6, 116, 116, 26);
-    context.fillStyle = STICKER_HEX[color];
+    context.fillStyle = swatch.hex;
     context.fill();
     context.clip();
     if (highlighted) {
-      context.strokeStyle = LABEL_INK[color];
+      context.strokeStyle = swatch.ink;
       context.lineWidth = 8;
       context.strokeRect(8, 8, 112, 112);
     }
@@ -361,12 +514,12 @@ export class CubeScene {
     context.lineJoin = "round";
     context.miterLimit = 2;
     context.lineWidth = 16;
-    context.strokeStyle = LABEL_HALO[color];
+    context.strokeStyle = swatch.halo;
     context.strokeText(STICKER_MARK[color], 64, 70);
     context.lineWidth = 6;
-    context.strokeStyle = LABEL_INK[color];
+    context.strokeStyle = swatch.ink;
     context.strokeText(STICKER_MARK[color], 64, 70);
-    context.fillStyle = LABEL_INK[color];
+    context.fillStyle = swatch.ink;
     context.fillText(STICKER_MARK[color], 64, 70);
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -383,6 +536,13 @@ export class CubeScene {
   private resetCubies() {
     for (const cubie of this.cubies) {
       this.scene.attach(cubie.mesh);
+      if (this.pyra) {
+        cubie.mesh.position.set(0, 0, 0);
+        cubie.mesh.quaternion.identity();
+        cubie.mesh.rotation.set(0, 0, 0);
+        cubie.mesh.scale.set(1, 1, 1);
+        continue;
+      }
       const pitch = this.order === 3 ? THREE_PITCH : this.order === 4 ? FOUR_PITCH : FIVE_PITCH;
       cubie.mesh.position.set(cubie.home.x * pitch, cubie.home.y * pitch, cubie.home.z * pitch);
       cubie.mesh.quaternion.identity();
@@ -546,6 +706,11 @@ export class CubeScene {
     this.dragging = false;
     if (!this.options.paintFace || dx * dx + dy * dy > 10 * 10) return;
     const index = this.pickIndex(event.clientX, event.clientY);
+    if (this.pyra) {
+      if (index === null || this.tetraFace(index) !== this.options.paintFace) return;
+      this.options.onPaint?.(index);
+      return;
+    }
     const stride = this.order === 5 ? 25 : this.order === 4 ? 16 : 9;
     const centre = this.order === 4 ? false : this.order === 5 ? index !== null && index % 25 === 12 : index !== null && isCentre(index);
     if (index === null || centre) return;
@@ -626,6 +791,33 @@ function traceRound(context: CanvasRenderingContext2D, x: number, y: number, wid
   context.arcTo(x, y + height, x, y, radius);
   context.arcTo(x, y, x + width, y, radius);
   context.closePath();
+}
+
+function triangleGeometry(verts: [PyraVec, PyraVec, PyraVec]): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(verts.flatMap((point) => [point.x, point.y, point.z]), 3));
+  const normal = new THREE.Vector3(verts[1].x - verts[0].x, verts[1].y - verts[0].y, verts[1].z - verts[0].z)
+    .cross(new THREE.Vector3(verts[2].x - verts[0].x, verts[2].y - verts[0].y, verts[2].z - verts[0].z))
+    .normalize();
+  const up = Math.abs(normal.y) > 0.92 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+  const yAxis = up.clone().addScaledVector(normal, -up.dot(normal)).normalize();
+  const xAxis = new THREE.Vector3().crossVectors(yAxis, normal).normalize();
+  const center = new THREE.Vector3(
+    (verts[0].x + verts[1].x + verts[2].x) / 3,
+    (verts[0].y + verts[1].y + verts[2].y) / 3,
+    (verts[0].z + verts[1].z + verts[2].z) / 3,
+  );
+  let reach = 0.001;
+  const placed = verts.map((point) => {
+    const delta = new THREE.Vector3(point.x, point.y, point.z).sub(center);
+    const x = delta.dot(xAxis);
+    const y = delta.dot(yAxis);
+    reach = Math.max(reach, Math.abs(x), Math.abs(y));
+    return { x, y };
+  });
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(placed.flatMap((point) => [0.5 + (point.x / reach) * 0.46, 0.5 + (point.y / reach) * 0.46]), 2));
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function moveSpec(move: string) {

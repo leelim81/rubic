@@ -1,4 +1,6 @@
 import { SolveStopped } from "./gullicube/client";
+import { solveMaster } from "./pyraminx/masterSolve";
+import { solvePyraminx } from "./pyraminx/solve";
 import { solveFour } from "./solver/fourSolve";
 import { solveFive } from "./solver/fiveSolve";
 import type { Solution } from "./solver/beginner";
@@ -8,6 +10,8 @@ import { solveCube } from "./solver/twoPhase";
 export type SolveMethod = "beginner" | "expert";
 
 function solveNow(facelets: string, method: SolveMethod): Solution {
+  if (facelets.length === 64) return solveMaster(facelets);
+  if (facelets.length === 36) return solvePyraminx(facelets);
   if (facelets.length === 150) return solveFive(facelets);
   if (facelets.length === 96) return solveFour(facelets);
   return method === "expert" ? solveCube(facelets) : solveBeginner(facelets);

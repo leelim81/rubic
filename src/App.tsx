@@ -3,9 +3,12 @@ import { createPortal } from "react-dom";
 import { applyFourString, fourMoveSpeech, invertFourMove, randomFourScramble, solvedFourString, validateFour } from "./cube/four";
 import { applyFiveString, fiveMoveSpeech, randomFiveScramble, solvedFiveString, validateFive } from "./cube/five";
 import { COLORS, type ColorName, applyMoves, centerColor, faceletsToString, moveDirection, mulberry32, randomScramble, solvedBytes, stringToFacelets } from "./cube/model";
+import { MASTER_COLORS, MASTER_GUIDE, MASTER_HOLD, MASTER_PER_FACE, applyMasterMoves, blankMaster, masterFacePose, masterFilled, masterFirstBlank, masterMoveSpeech, masterStickerLabel, randomMasterScramble, solvedMasterString, validateMaster } from "./pyraminx/master";
+import { PYRA_COLORS, PYRA_FACES, PYRA_GUIDE, PYRA_HOLD, applyPyraMoves, blankPyra, letterOfColor, pyraFacePose, pyraFilled, pyraFirstBlank, pyraMoveSpeech, pyraStickerLabel, randomPyraScramble, solvedPyraString, validatePyraminx } from "./pyraminx/model";
 import { PAINT_FACES, PAINT_GUIDE, blankCount, blankMessage, blankPaint, faceAfterFailedDone, facePose, filledOnFace, faceletIndex, isCentre, paintableOnFace, paintErrorMessage } from "./view/paint";
 import { playPaintError } from "./view/paintSound";
 import { STICKER_MARK } from "./view/contrast";
+import { PaletteToggle } from "./view/PaletteToggle";
 import { validateFaceletString } from "./cube/validate";
 import { solveInWorker, type SolveMethod } from "./solveClient";
 import { DECLINED_KEY, SolveStopped, gullicubeBlocked, rememberGullicubeFailure, retryGullicube, solveShorter, type WorkerLike } from "./gullicube/client";
@@ -33,6 +36,8 @@ import {
 } from "./state/lesson";
 import { CubeView, type CubeHandle } from "./view/CubeView";
 import { Disclosure } from "./view/Disclosure";
+
+type Puzzle = 3 | 4 | 5 | "pyraminx" | "master";
 
 const SOLVED = faceletsToString(solvedBytes());
 const STORAGE = "rubic-lesson-v1";
@@ -63,7 +68,7 @@ export function App() {
   const lessonRef = useRef(lesson);
   const [turnMs, setTurnMs] = useState(750);
   const [method, setMethod] = useState<SolveMethod>(readMethod);
-  const [size, setSize] = useState<3 | 4 | 5>(readSize);
+  const [size, setSize] = useState<Puzzle>(readSize);
   const [loadingNote, setLoadingNote] = useState("Preparing the solution… you can keep looking at the cube.");
   const [solverPhase, setSolverPhase] = useState<SolverPhase>("idle");
   const [solverProgress, setSolverProgress] = useState({ received: 0, total: 0 });
@@ -443,7 +448,7 @@ export function App() {
     setSolverProgress({ received: 0, total: solverProgress.total });
   }
 
-  function chooseSize(next: 3 | 4 | 5) {
+  function chooseSize(next: Puzzle) {
     setSize(next);
     if (next !== 3) setMethod("expert");
     setEntered(false);
@@ -454,8 +459,8 @@ export function App() {
   }
 
   function startPaint() {
-    setPaintCells(entered ? facelets : blankPaint(size));
-    setPaintColor("white");
+    setPaintCells(entered ? facelets : blankFor(size));
+    setPaintColor(size === "pyraminx" || size === "master" ? "yellow" : "white");
     setPaintStep(0);
     setPaintError(null);
     setMode("paint");
@@ -469,7 +474,7 @@ export function App() {
   }
 
   function clearPaint() {
-    setPaintCells(blankPaint(size));
+    setPaintCells(blankFor(size));
     setPaintError(null);
     setPaintStep(0);
   }
@@ -484,6 +489,13 @@ export function App() {
   }
 
   function paintSticker(index: number) {
+    if (paintCells.length === 36 || paintCells.length === 64) {
+      const stride = paintCells.length === 64 ? MASTER_PER_FACE : 9;
+      if (Math.floor(index / stride) !== paintStep) return;
+      const letter = letterOfColor(paintColor);
+      setPaintCells((current) => current.slice(0, index) + letter + current.slice(index + 1));
+      return;
+    }
     const face = PAINT_FACES[paintStep];
     const order: 3 | 4 | 5 = paintCells.length === 150 ? 5 : paintCells.length === 96 ? 4 : 3;
     const stride = order === 5 ? 25 : order === 4 ? 16 : 9;
@@ -495,8 +507,8 @@ export function App() {
   function rejectPaint(message: string, face: "F" | "R" | "B" | "L" | "U" | "D") {
     playPaintError();
     setPaintError(message);
-    setPaintStep(Math.max(0, PAINT_FACES.indexOf(face)));
-    const pose = facePose(face);
+    setPaintStep(Math.max(0, (size === "pyraminx" || size === "master" ? PYRA_FACES : PAINT_FACES).indexOf(face as "F")));
+    const pose = (size === "pyraminx" || size === "master") && (face === "F" || face === "R" || face === "L" || face === "D") ? (size === "master" ? masterFacePose(face) : pyraFacePose(face)) : facePose(face);
     cubeRef.current?.setPaintFace(face);
     void cubeRef.current?.lookAt(pose.theta, pose.phi, 680);
     if (!reduced) {
@@ -508,7 +520,31 @@ export function App() {
 
   function finishPaint() {
     if (blankCount(paintCells) > 0) {
-      rejectPaint(blankMessage(blankCount(paintCells)), faceAfterFailedDone(paintCells));
+      rejectPaint(blankMessage(blankCount(paintCells)), paintCells.length === 64 ? masterFirstBlank(paintCells) : paintCells.length === 36 ? pyraFirstBlank(paintCells) : faceAfterFailedDone(paintCells));
+      return;
+    }
+    if (paintCells.length === 64) {
+      const master = validateMaster(paintCells);
+      if (!master.ok) {
+        rejectPaint(master.message, masterFirstBlank(paintCells));
+        return;
+      }
+      const cells = paintCells;
+      setEntered(true);
+      leavePaint();
+      void load(cells, "Solution started from the colours you entered.");
+      return;
+    }
+    if (paintCells.length === 36) {
+      const pyraminx = validatePyraminx(paintCells);
+      if (!pyraminx.ok) {
+        rejectPaint(pyraminx.message, pyraFirstBlank(paintCells));
+        return;
+      }
+      const cells = paintCells;
+      setEntered(true);
+      leavePaint();
+      void load(cells, "Solution started from the colours you entered.");
       return;
     }
     if (paintCells.length === 150 || paintCells.length === 96) {
@@ -533,8 +569,9 @@ export function App() {
 
   useEffect(() => {
     if (mode !== "paint") return;
-    const face = PAINT_FACES[paintStep] ?? "F";
-    const pose = facePose(face);
+    const tetra = size === "pyraminx" || size === "master";
+    const face = (tetra ? PYRA_FACES : PAINT_FACES)[paintStep] ?? "F";
+    const pose = tetra ? pyraFacePose(face === "F" || face === "R" || face === "L" || face === "D" ? face : "F") : facePose(face);
     cubeRef.current?.setPaintFace(face);
     void cubeRef.current?.lookAt(pose.theta, pose.phi, 680);
   }, [mode, paintStep]);
@@ -551,11 +588,13 @@ export function App() {
   const tools = mode !== "paint" ? (
     <div className="header-tools">
       {!entered ? (
-              <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(cubeSizeFrom(event.target.value))}>
-                <option value={3}>3×3</option>
-                <option value={4}>4×4</option>
-                <option value={5}>5×5</option>
-              </select>
+        <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(readPuzzle(event.target.value))}>
+          <option value={3}>3×3</option>
+          <option value={4}>4×4</option>
+          <option value={5}>5×5</option>
+          <option value="pyraminx">Pyraminx</option>
+          <option value="master">Master Pyraminx</option>
+        </select>
       ) : null}
       {entered && mode === "cube" ? (
         <nav aria-label="Primary">
@@ -587,9 +626,9 @@ export function App() {
                 facelets={mode === "paint" ? paintCells : facelets}
                 letters={letters}
                 gesture="view"
-                label={mode === "paint" ? paintLabel(paintStep) : cubeLabel(facelets, finished ? undefined : nextMove)}
+                label={mode === "paint" ? paintLabel(paintStep, size) : cubeLabel(facelets, finished ? undefined : nextMove)}
                 onPaint={paintSticker}
-                paintFace={mode === "paint" ? PAINT_FACES[paintStep] ?? null : null}
+                paintFace={mode === "paint" ? ((size === "pyraminx" || size === "master") ? PYRA_FACES[paintStep] ?? null : PAINT_FACES[paintStep] ?? null) : null}
                 idle={mode === "cube" && !entered}
                 onGesture={onGesture}
                 turnMs={turnMs}
@@ -603,7 +642,7 @@ export function App() {
               {moveLine ? <p className="move-line" data-testid="move-line">{moveLine}</p> : null}
             </div>
           ) : (
-            <p id="cube-title" className="empty-prompt" data-testid="empty-prompt">Enter your cube's colours to get step-by-step help.</p>
+            <p id="cube-title" className="empty-prompt" data-testid="empty-prompt">{size === "master" ? "Enter your Master Pyraminx's colours to get step-by-step help." : size === "pyraminx" ? "Enter your Pyraminx's colours to get step-by-step help." : "Enter your cube's colours to get step-by-step help."}</p>
           )}
           <p className="sr-only" data-testid="lesson-facelets">{facelets}</p>
           {mode === "paint" ? <p className="sr-only" data-testid="paint-cells">{paintCells}</p> : null}
@@ -654,10 +693,12 @@ export function App() {
             </label>
             <label className="speed-label">
               Cube
-              <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(cubeSizeFrom(event.target.value))}>
+              <select aria-label="Cube size" value={size} onChange={(event) => chooseSize(readPuzzle(event.target.value))}>
                 <option value={3}>3×3</option>
                 <option value={4}>4×4</option>
                 <option value={5}>5×5</option>
+                <option value="pyraminx">Pyraminx</option>
+                <option value="master">Master Pyraminx</option>
               </select>
             </label>
             <label className="speed-label">
@@ -675,16 +716,25 @@ export function App() {
               <button type="button" onClick={() => void run(() => replayMove())} disabled={running || lesson.busy || loading || (!nextMove && lesson.cursor === 0)}>Replay move</button>
               <button type="button" onClick={() => cubeRef.current?.resetView()}>Reset view</button>
             </div>
+            <PaletteToggle />
             <label className="check">
               <input type="checkbox" checked={letters} onChange={(event) => setLetters(event.target.checked)} />
               Letter stickers (W Y R O B G) as well as colour
             </label>
-            <p className="quiet">{facelets.length === 54 ? holdLine(stringToFacelets(facelets)) : "Hold yellow on top, white on the bottom, and green in front. Right is orange."}</p>
-            <p className="quiet">R means the right face, not red. A letter alone is clockwise as you look at that face. 2 is a half turn. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the cube as it was when that run started.</p>
+            <p className="quiet">{size === "master" ? MASTER_HOLD : size === "pyraminx" ? PYRA_HOLD : facelets.length === 150 ? "Hold the yellow centre on top, the white centre on the bottom, and the green centre facing you. Right is orange." : facelets.length === 54 ? holdLine(stringToFacelets(facelets)) : "Hold yellow on top, white on the bottom, and green in front. Right is orange."}</p>
+            <p className="quiet">{size === "master"
+              ? "Uw turns three layers around a tip. U turns the tip and the layer under it. A lowercase letter turns only the tip. Clockwise is as you look at the tip. Solve 3× plays the remaining moves at three times the selected speed."
+              : size === "pyraminx"
+              ? "A capital letter turns that tip and the layer under it. A lowercase letter turns only the tip. Clockwise is as you look at the tip. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the Pyraminx as it was when that run started."
+              : "R means the right face, not red. A letter alone is clockwise as you look at that face. 2 is a half turn. Solve 3× plays the remaining moves at three times the selected speed. Restore before solve returns to the cube as it was when that run started."}</p>
             <p className="quiet">{size === 5
               ? "5×5 is Expert only. The shorter solver is Tomas Rokicki’s gullicube (MPL-2.0). If it is not downloaded, or this device cannot run it, centres are solved first, then the edges, then the cube is reduced to a 3×3. A solution is correct, not a claim that no shorter one exists. White sits opposite yellow, red opposite orange, and blue opposite green."
               : size === 4
                 ? "4×4 is Expert only. It has no fixed centre. Centres are solved first, then the edges, including the parity cases, then the cube is reduced to a 3×3. A solution is correct, not a claim that no shorter one exists."
+              : size === "master"
+                ? "Master Pyraminx is Expert only. Wings are paired with the midges, that Pyraminx is solved with wide turns, then the face centres are restored. Yellow is on the bottom, green in front, red on the right, and blue on the left."
+              : size === "pyraminx"
+                ? "Pyraminx is Expert only. There is no beginner lesson. Yellow is on the bottom, green in front, red on the right, and blue on the left. The layer turns are the shortest way to solve the edges and centres. Each tip is then turned into place, at most one turn."
                 : "Ordinary Western 3×3: white opposite yellow, red opposite orange, blue opposite green. Colours stay in this browser. Expert is a fast two-phase search. Beginner is the layer-by-layer lesson."}</p>
             {size === 5 && solverPhase === "ready" ? (
               <button type="button" onClick={() => void removeCachedSolver()}>Remove cached solver</button>
@@ -698,13 +748,18 @@ export function App() {
 }
 
 function PaintStatus({ step, cells, error }: { step: number; cells: string; error: string | null }) {
-  const face = PAINT_FACES[step] ?? "F";
-  const guide = PAINT_GUIDE[face];
+  const master = cells.length === 64;
+  const pyra = cells.length === 36 || master;
+  const face = (pyra ? PYRA_FACES : PAINT_FACES)[step] ?? "F";
+  const guide = master ? MASTER_GUIDE[face as "F"] : pyra ? PYRA_GUIDE[face as "F"] : PAINT_GUIDE[face];
+  const filled = master ? masterFilled(cells, face as "F") : pyra ? pyraFilled(cells, face as "F") : filledOnFace(cells, face);
+  const total = master ? MASTER_PER_FACE : pyra ? 9 : paintableOnFace(cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3);
+  const steps = pyra ? PYRA_FACES.length : PAINT_FACES.length;
   return (
     <div className="status" aria-live="polite">
-      <p id="cube-title" className="status-title" data-testid="paint-face">{guide.title} · {step + 1} of {PAINT_FACES.length}</p>
+      <p id="cube-title" className="status-title" data-testid="paint-face">{guide.title} · {step + 1} of {steps}</p>
       <p className="quiet">{cells.length === 96 ? "A 4×4 has no fixed centre. Paint every sticker you see. The solution keeps yellow on top, white on the bottom, and green in front." : guide.turn}</p>
-      <p className="quiet" data-testid="paint-progress">{filledOnFace(cells, face)}/{paintableOnFace(cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3)} filled</p>
+      <p className="quiet" data-testid="paint-progress">{filled}/{total} filled</p>
       {error ? <p className="error" role="alert">{error}</p> : null}
     </div>
   );
@@ -724,18 +779,35 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
   onClear: () => void;
   onCancel: () => void;
 }) {
-  const last = step === PAINT_FACES.length - 1;
-  const face = PAINT_FACES[step] ?? "F";
-  const guide = PAINT_GUIDE[face];
+  const master = cells.length === 64;
+  const pyra = cells.length === 36 || master;
+  const faces = pyra ? PYRA_FACES : PAINT_FACES;
+  const last = step === faces.length - 1;
+  const face = faces[step] ?? "F";
+  const guide = master ? MASTER_GUIDE[face as "F"] : pyra ? PYRA_GUIDE[face as "F"] : PAINT_GUIDE[face];
+  const palette = master ? MASTER_COLORS : pyra ? PYRA_COLORS : COLORS;
   return (
     <div className="paint-bar">
       <div className="palette paint-palette" role="group" aria-label="Paint colour">
-        {COLORS.map((name) => (
+        {palette.map((name) => (
           <button key={name} type="button" data-colour={name} aria-pressed={color === name} aria-label={name} onClick={() => onColor(name)}>{STICKER_MARK[name]}</button>
         ))}
       </div>
       <div className="sr-only" role="group" aria-label={`${guide.title} stickers`}>
-        {Array.from({ length: cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3 }, (_, row) => row).flatMap((row) => Array.from({ length: cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3 }, (_, col) => {
+        {pyra ? PYRA_FACES[step] ? Array.from({ length: master ? MASTER_PER_FACE : 9 }, (_, local) => {
+          const stride = master ? MASTER_PER_FACE : 9;
+          const index = step * stride + local;
+          const current = cells[index] === "." ? "blank" : STICKER_NAME[cells[index] ?? ""] ?? "unknown";
+          const label = master ? masterStickerLabel(PYRA_FACES[step]!, local) : pyraStickerLabel(PYRA_FACES[step]!, local);
+          return (
+            <button
+              key={index}
+              type="button"
+              onClick={() => onPaint(index)}
+              aria-label={`${label}, ${current}`}
+            />
+          );
+        }) : null : Array.from({ length: cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3 }, (_, row) => row).flatMap((row) => Array.from({ length: cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3 }, (_, col) => {
           const order = cells.length === 150 ? 5 : cells.length === 96 ? 4 : 3;
           const index = faceletIndex(face, row, col, order);
           const current = cells[index] === "." ? "blank" : STICKER_NAME[cells[index] ?? ""] ?? "unknown";
@@ -776,12 +848,22 @@ function browserStorage(): Storage | null {
   }
 }
 
-function paintLabel(step: number): string {
+function paintLabel(step: number, puzzle: Puzzle): string {
+  if (puzzle === "master") {
+    const face = PYRA_FACES[step] ?? "F";
+    return `Painting the ${MASTER_GUIDE[face].title.toLowerCase()} face. ${MASTER_GUIDE[face].turn}`;
+  }
+  if (puzzle === "pyraminx") {
+    const face = PYRA_FACES[step] ?? "F";
+    return `Painting the ${PYRA_GUIDE[face].title.toLowerCase()} face. ${PYRA_GUIDE[face].turn}`;
+  }
   const face = PAINT_FACES[step] ?? "F";
   return `Painting the ${PAINT_GUIDE[face].title.toLowerCase()} face. ${PAINT_GUIDE[face].turn}`;
 }
 
-function plainMove(move: string, cubeSize: 3 | 4 | 5 = 3): string {
+function plainMove(move: string, cubeSize: Puzzle = 3): string {
+  if (cubeSize === "master") return `${move}. ${masterMoveSpeech(move)}`;
+  if (cubeSize === "pyraminx") return `${move}. ${pyraMoveSpeech(move)}`;
   if (cubeSize === 5) return `${move}. ${fiveMoveSpeech(move)}`;
   if (cubeSize === 4) return `${move}. ${fourMoveSpeech(move)}`;
   if (move.endsWith("2")) {
@@ -791,25 +873,23 @@ function plainMove(move: string, cubeSize: 3 | 4 | 5 = 3): string {
   return `${move}. ${moveDirection(move)}.`;
 }
 
-function invert(move: string, cubeSize: 3 | 4 | 5): string {
+function invert(move: string, cubeSize: Puzzle): string {
   if (cubeSize === 4) return invertFourMove(move);
   return invertMove(move);
 }
 
-function cubeSizeFrom(value: string): 3 | 4 | 5 {
-  if (value === "4") return 4;
-  if (value === "5") return 5;
-  return 3;
-}
-
-function applyScramble(cubeSize: 3 | 4 | 5): string {
+function applyScramble(cubeSize: Puzzle): string {
   const seed = Math.floor(Math.random() * 1_000_000_000);
+  if (cubeSize === "master") return applyMasterMoves(solvedMasterString(), randomMasterScramble(mulberry32(seed)));
+  if (cubeSize === "pyraminx") return applyPyraMoves(solvedPyraString(), randomPyraScramble(mulberry32(seed)));
   if (cubeSize === 5) return applyFiveString(solvedFiveString(), randomFiveScramble(mulberry32(seed), 40));
   if (cubeSize === 4) return applyFourString(solvedFourString(), randomFourScramble(mulberry32(seed), 40));
   return faceletsToString(applyMoves(solvedBytes(), randomScramble(mulberry32(seed), 22)));
 }
 
-function solvedFor(cubeSize: 3 | 4 | 5): string {
+function solvedFor(cubeSize: Puzzle): string {
+  if (cubeSize === "master") return solvedMasterString();
+  if (cubeSize === "pyraminx") return solvedPyraString();
   if (cubeSize === 5) return solvedFiveString();
   if (cubeSize === 4) return solvedFourString();
   return faceletsToString(solvedBytes());
@@ -820,6 +900,12 @@ function holdLine(state: ReturnType<typeof stringToFacelets>): string {
 }
 
 function cubeLabel(facelets: string, move: string | undefined): string {
+  if (facelets.length === 64) {
+    return move ? `Master Pyraminx. Next move ${move}. ${MASTER_HOLD}` : `Master Pyraminx. ${MASTER_HOLD}`;
+  }
+  if (facelets.length === 36) {
+    return move ? `Pyraminx. Next move ${move}. ${PYRA_HOLD}` : `Pyraminx. ${PYRA_HOLD}`;
+  }
   if (facelets.length === 96) {
     const line = "4×4 has no fixed centre. Yellow stays on top, white on the bottom, and green in front.";
     return move ? `Cube. Next move ${move}. ${line}` : `Cube. ${line}`;
@@ -847,9 +933,23 @@ function readEntered(): boolean {
   }
 }
 
-function readSize(): 3 | 4 | 5 {
+function readPuzzle(value: string): Puzzle {
+  if (value === "4") return 4;
+  if (value === "5") return 5;
+  if (value === "pyraminx") return "pyraminx";
+  if (value === "master") return "master";
+  return 3;
+}
+
+function blankFor(size: Puzzle): string {
+  if (size === "master") return blankMaster();
+  if (size === "pyraminx") return blankPyra();
+  return blankPaint(size);
+}
+
+function readSize(): Puzzle {
   try {
-    return cubeSizeFrom(localStorage.getItem(SIZE_KEY) ?? "3");
+    return readPuzzle(localStorage.getItem(SIZE_KEY) ?? "3");
   } catch {
     return 3;
   }
