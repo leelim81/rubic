@@ -14,8 +14,15 @@ export const FIVE_BODY = 0.62;
 export const FIVE_STICKER = 0.56;
 export const FIVE_LIFT = 0.32;
 
-/** 4×4 grid is ±3 and ±1, so the pitch is tighter to keep the same frame as a 3×3. */
-export const FOUR_PITCH = 0.46;
-export const FOUR_BODY = 0.4;
-export const FOUR_STICKER = 0.34;
-export const FOUR_LIFT = 0.21;
+/**
+ * 4×4 cubies sit on grid coordinates −3, −1, 1 and 3, so neighbouring centres
+ * are two grid steps apart. Pitch is the length of one grid step. It is set
+ * so the finished cube has the same outer size as the 3×3, and the same share
+ * of each slot is plastic (body / centre-spacing matches THREE_BODY). Treating
+ * the grid step as 1 leaves a hole nearly as wide as a cubie.
+ */
+const FOUR_OUTER = THREE_PITCH + THREE_BODY / 2;
+export const FOUR_PITCH = FOUR_OUTER / (3 + THREE_BODY / THREE_PITCH);
+export const FOUR_BODY = (THREE_BODY / THREE_PITCH) * 2 * FOUR_PITCH;
+export const FOUR_STICKER = (THREE_STICKER / THREE_PITCH) * 2 * FOUR_PITCH;
+export const FOUR_LIFT = (THREE_LIFT / THREE_PITCH) * 2 * FOUR_PITCH;
