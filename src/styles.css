@@ -70,6 +70,15 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 button, input, select { font: inherit; color: inherit; }
+/* The open menu keeps each option's own background. A transparent option
+   on the header select's faint white fill is painted as a white menu, while
+   the text stays the inherited near-white, so the choices vanish in Chrome,
+   Edge, and Windows Firefox in either OS theme. Pin both colours. Safari
+   ignores these and uses the dark color-scheme already set on the page. */
+select option {
+  background-color: var(--bg);
+  color: var(--text);
+}
 button, .file {
   min-height: 44px;
   border-radius: 14px;
