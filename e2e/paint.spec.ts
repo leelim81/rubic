@@ -88,7 +88,8 @@ test("paints a known cube on the 3D faces, then solves it", async ({ page }, tes
       expect(canvasBox && nextBox && view).toBeTruthy();
       expect(nextBox!.y).toBeGreaterThanOrEqual((canvasBox!.y + canvasBox!.height) - 1);
       expect(nextBox!.y + nextBox!.height).toBeLessThanOrEqual(view!.height + 1);
-      expect(nextBox!.height).toBeGreaterThanOrEqual(44);
+      // Buttons are 36px on a phone, 44px on desktop.
+      expect(nextBox!.height).toBeGreaterThanOrEqual(36);
     }
     for (let row = 0; row < 3; row += 1) {
       for (let col = 0; col < 3; col += 1) {

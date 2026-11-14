@@ -58,7 +58,7 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
-#root { margin: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#root { margin: 0; flex: 1 0 auto; display: flex; flex-direction: column; }
 html { overflow-x: clip; }
 body {
   overflow-anchor: none;
@@ -167,7 +167,7 @@ h2 { font-size: clamp(1.35rem, 2.4vw, 1.7rem); margin: 0.2rem 0; }
 .speed-label { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); margin: 0.15rem 0 0.5rem; }
 .speed-label select { width: auto; min-width: 7rem; }
 
-main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width: 920px; margin: 0 auto; width: 100%; }
+main { display: flex; flex-direction: column; flex: 1 0 auto; max-width: 920px; margin: 0 auto; width: 100%; }
 .hidden-mode { display: none; }
 .panel, .scan, .manual, .primer {
   background: var(--bg-2);
@@ -182,8 +182,7 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
   border: 0;
   box-shadow: none;
   padding: 0;
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -192,7 +191,7 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
 .hero { display: flex; justify-content: center; align-items: center; position: relative; order: 2; flex: 1 0 auto; min-height: 228px; container-type: size; }
 .status, .empty-prompt { order: 1; }
 .paint-bar, .controls, .enter-hero { order: 3; }
-.notice, .error, .disclosure, .rail > .quiet { order: 4; }
+.notice, .error, .disclosure, .rail > .quiet, .rail > .text-button { order: 4; }
 .hero::before {
   content: "";
   position: absolute;
@@ -206,7 +205,7 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
 }
 .cube-frame {
   position: relative;
-  width: min(100cqw, 100cqh, 62vh, 580px);
+  width: min(100cqw, 100cqh, 68vh, 640px);
   aspect-ratio: 1;
   margin-inline: auto;
   border-radius: 16px;
@@ -502,6 +501,17 @@ footer { color: var(--muted); font-size: 0.92rem; }
   .paint-bar { gap: 6px; margin-top: 6px; }
   .paint-palette { flex-wrap: nowrap; gap: 4px; }
   .paint-palette button { flex: 1 1 0; width: auto; min-width: 36px; max-width: 44px; }
+}
+
+@media (max-width: 1024px) {
+  /* Smaller buttons leave more room for the cube on a phone or small tablet. */
+  button { min-height: 36px; }
+  .paint-nav button, .paint-clear { min-height: 36px; }
+  .paint-bar { gap: 6px; margin-top: 6px; }
+  .paint-palette button { flex: 0 0 36px; width: 36px; height: 36px; min-height: 36px; }
+  .disclosure summary { min-height: 36px; }
+  .enter-hero button { min-height: 52px; font-size: 1.05rem; }
+  .controls { gap: 0.4rem; margin: 0.5rem 0 0.1rem; }
 }
 
 @media (max-width: 860px) {

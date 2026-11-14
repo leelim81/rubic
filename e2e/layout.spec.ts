@@ -37,7 +37,8 @@ test("the solved page has one status, no stale move, and the cube clears the con
   expect(inView(cube, view)).toBe(true);
   expect(inView(next, view)).toBe(true);
   expect(inView(solve, view)).toBe(true);
-  expect(next!.height).toBeGreaterThanOrEqual(44);
+  // Buttons are 36px on a phone or small tablet, 44px on a larger desktop.
+  expect(next!.height).toBeGreaterThanOrEqual(view.width <= 1024 ? 36 : 44);
   await expect(page.getByRole("radio")).toHaveCount(0);
   await page.screenshot({ path: `/opt/cursor/artifacts/quiet-solved-${testInfo.project.name}.png` });
 });

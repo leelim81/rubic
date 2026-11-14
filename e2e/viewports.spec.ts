@@ -125,7 +125,9 @@ async function fit(page: Page, label: string) {
   expect(inView(brand, view!), `${label} brand on screen`).toBe(true);
   expect(brand!.height, `${label} brand wraps`).toBeLessThan(34);
   await expect(page.getByTestId("brand").locator("span:visible"), `${label} brand text`).toHaveText(view!.width >= 640 ? "Trevor\u2019s Real Rubik\u2019s Solver" : "Trevor\u2019s Solver");
-  const minButton = view!.height <= 520 && view!.width >= 480 ? 36 : 44;
+  // Buttons are 36px on a phone or small tablet (and in the short
+  // landscape layout), 44px on a larger desktop.
+  const minButton = view!.width <= 1024 || (view!.height <= 520 && view!.width >= 480) ? 36 : 44;
   const buttons = page.locator(".paint-nav button:visible, .paint-palette button:visible, .paint-clear:visible, .controls button:visible, .enter-hero button:visible, header button:visible");
   const count = await buttons.count();
   const boxes: { x: number; y: number; width: number; height: number }[] = [];
