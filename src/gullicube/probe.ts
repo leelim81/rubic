@@ -8,7 +8,7 @@ const PAGE = 65536;
 /** Measured resident size of a 5×5 gullicube solve, with a little headroom. */
 export const PROBE_BYTES = 1400 * 1024 * 1024;
 export const SOLVE_SECONDS = 16;
-export const SOLVE_TIMEOUT_MS = 40_000;
+export const SOLVE_TIMEOUT_MS = 90_000;
 
 export function probeWasmMemory(bytes: number): void {
   const pages = Math.ceil(bytes / PAGE);

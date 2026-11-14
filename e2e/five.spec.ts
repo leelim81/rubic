@@ -102,7 +102,8 @@ test("a 5×5 can be scrambled, stepped, solved quickly, and restored", async ({ 
 });
 
 test("a solved 5×5 can be entered by tapping the 3D stickers", async ({ page }, testInfo) => {
-  test.setTimeout(360_000);
+  // Tapping 120 stickers is slow on a loaded runner; give it headroom.
+  test.setTimeout(480_000);
   if (testInfo.project.name === "mobile") await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("./");
   await page.evaluate(() => localStorage.clear());

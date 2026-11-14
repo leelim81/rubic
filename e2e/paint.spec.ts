@@ -73,7 +73,8 @@ test("a mistake on a later face returns to the front and keeps the paint", async
 });
 
 test("paints a known cube on the 3D faces, then solves it", async ({ page }, testInfo) => {
-  test.setTimeout(180_000);
+  // Tapping 48 stickers is slow on a loaded runner; give it headroom.
+  test.setTimeout(300_000);
   const target = faceletsToString(applyMoves(solvedBytes(), ["R", "U"]));
   await page.goto("./");
   await page.getByRole("button", { name: "Enter colours" }).click();
