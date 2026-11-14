@@ -66,6 +66,7 @@ export function App() {
   const cubeRef = useRef<CubeHandle>(null);
   const flight = useRef(false);
   const solvingRef = useRef(false);
+  const modeRef = useRef<"cube" | "paint">("cube");
   const runToken = useRef(0);
   const shakeTimer = useRef(0);
   const lessonRef = useRef(lesson);
@@ -188,6 +189,10 @@ export function App() {
   }, [size, downloadAttempt]);
 
   useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && mode === "paint") {
         leavePaint();
@@ -218,7 +223,7 @@ export function App() {
     }
   }
 
-  async function load(start: string, notice: string | null = null, chosen: SolveMethod = method) {
+  async function load(start: string, notice: string | null = null, chosen: SolveMethod = method, fromPaint = false) {
     setLoading(true);
     setError(null);
     try {
@@ -229,7 +234,17 @@ export function App() {
       setMode("cube");
     } catch (caught) {
       if (caught instanceof SolveStopped) return;
-      setError(caught instanceof Error ? caught.message : "The solution could not be prepared.");
+      const message = caught instanceof Error ? caught.message : "The solution could not be prepared.";
+      // A freshly painted 4×4/5×5 can still fail inside the solver when two
+      // stickers are swapped in a way no cheap check can see (the wings
+      // cannot be paired). That is a colouring problem, not a solver bug, so
+      // send the user back to the paint screen with a plain message instead
+      // of leaving them stuck on a solver error.
+      if (fromPaint && modeRef.current === "paint" && /unpaired|real edge|real corner|did not finish|could not be solved/i.test(message)) {
+        rejectPaint("These colours can't make a real cube — one or two stickers are probably swapped. Check the colours and try again.", "F");
+        return;
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -482,6 +497,13 @@ export function App() {
     setPaintStep(0);
   }
 
+  function scramblePaint() {
+    setPaintCells(applyScramble(size));
+    setPaintError(null);
+    const faces = size === "mega" ? MEGA_PAINT_ORDER.length : size === "pyraminx" || size === "master" ? PYRA_FACES.length : PAINT_FACES.length;
+    setPaintStep(faces - 1);
+  }
+
   function newCube() {
     setEntered(false);
     setCheckpoint(null);
@@ -587,7 +609,7 @@ export function App() {
         rejectPaint(checked.message, "F");
         return;
       }
-      void load(paintCells);
+      void load(paintCells, null, method, true);
       return;
     }
     const verdict = validateFaceletString(paintCells);
@@ -699,6 +721,7 @@ export function App() {
               onNext={() => { setPaintError(null); setPaintStep((value) => Math.min((paintCells.length === 132 ? MEGA_PAINT_ORDER.length : paintCells.length === 36 || paintCells.length === 64 ? PYRA_FACES.length : PAINT_FACES.length) - 1, value + 1)); }}
               onDone={finishPaint}
               onClear={clearPaint}
+              onScramble={scramblePaint}
               onCancel={() => leavePaint()}
             />
           ) : entered ? (
@@ -826,7 +849,7 @@ function PaintStatus({ step, cells, error }: { step: number; cells: string; erro
 
 const STICKER_NAME: Record<string, string> = { w: "white", y: "yellow", r: "red", o: "orange", b: "blue", g: "green" };
 
-function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, onDone, onClear, onCancel }: {
+function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, onDone, onClear, onScramble, onCancel }: {
   step: number;
   cells: string;
   color: string;
@@ -836,6 +859,7 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
   onNext: () => void;
   onDone: () => void;
   onClear: () => void;
+  onScramble: () => void;
   onCancel: () => void;
 }) {
   const master = cells.length === 64;
@@ -894,7 +918,10 @@ function PaintControls({ step, cells, color, onColor, onPaint, onBack, onNext, o
           : <button type="button" className="primary" onClick={onNext}>Next face</button>}
         <button type="button" className="ghost" onClick={onCancel}>Cancel</button>
       </div>
-      <button type="button" className="paint-clear" onClick={onClear}>Clear all</button>
+      <div className="paint-row">
+        <button type="button" className="paint-clear" onClick={onScramble}>Scramble</button>
+        <button type="button" className="paint-clear" onClick={onClear}>Clear all</button>
+      </div>
     </div>
   );
 }

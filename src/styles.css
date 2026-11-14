@@ -400,6 +400,8 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width:
 .paint-nav { display: flex; gap: 0.45rem; }
 .paint-nav button { flex: 1 1 0; min-height: 44px; }
 .paint-clear { width: 100%; min-height: 44px; background: transparent; color: var(--muted); }
+.paint-row { display: flex; gap: 0.45rem; }
+.paint-row .paint-clear { flex: 1 1 0; width: auto; }
 .paint-palette { margin: 0; }
 .paint-palette button {
   display: grid;

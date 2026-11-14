@@ -1,7 +1,7 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
 import type { Face } from "../src/cube/model";
 import { projectToScreen } from "../src/view/camera";
-import { facePose, stickerPoint } from "../src/view/paint";
+import { facePose, stickerPoint, type PaintOrder } from "../src/view/paint";
 
 export async function waitForFace(page: Page, face: Face) {
   const pose = facePose(face);
@@ -15,7 +15,7 @@ export async function waitForFace(page: Page, face: Face) {
   }, pose);
 }
 
-export async function paintSticker(page: Page, face: Face, row: number, col: number, testInfo: TestInfo, order: 3 | 5 = 3) {
+export async function paintSticker(page: Page, face: Face, row: number, col: number, testInfo: TestInfo, order: PaintOrder = 3) {
   await waitForFace(page, face);
   const canvas = page.locator("canvas");
   const box = await canvas.boundingBox();

@@ -6,7 +6,7 @@ A 3×3, 4×4 and 5×5 solver that runs as a static site at [https://leelim81.git
 
 5×5 is Expert only. Choosing 5×5 downloads Tomas Rokicki’s [gullicube](https://github.com/rokicki/gullicube) (MPL-2.0; see `public/gullicube/NOTICE`) and keeps it in this browser. Cancel, a failed download, or a device that cannot give the solver the memory it needs falls back to the built-in reduction solver. The 3×3 solver is unchanged.
 
-Next turns one layer on the cube. Solve 3× plays the remaining moves at three times the selected speed, and Restore before solve puts the cube back to the moment that run started. The solution is Kociemba's two-phase algorithm via cubejs. It is short, and it is not a claim that no shorter sequence exists. Enter colours is the way to type a cube in. Photos and a camera scan are not part of the page.
+Next turns one layer on the cube. Solve 3× plays the remaining moves at three times the selected speed, and Restore before solve puts the cube back to the moment that run started. The solution is Kociemba's two-phase algorithm via cubejs. It is short, and it is not a claim that no shorter sequence exists. Enter colours is the way to type a cube in. Scramble on that screen fills in a random legal scramble instead, so the colours are always a real cube. Photos and a camera scan are not part of the page.
 
 Drag the cube in **Rotate view** and the surface under your finger follows the drag. Switch to **Turn a face** and drag a sticker the way that layer should slide. Face buttons, speed, scramble, and reset are under **Options**. If the browser asks for reduced motion, a move jumps to its end.
 

@@ -11,7 +11,7 @@
  * front, blue at the back, orange on the right, red on the left.
  */
 
-import { COLOR_LETTER, COLORS, FACES, HOME_CENTER, type Face, type Vec, colorIndex } from "./model";
+import { COLOR_LETTER, COLORS, FACES, HOME_CENTER, type Face, type Vec, colorIndex, readCubies, stringToFacelets } from "./model";
 
 export const FOUR = 4;
 export const FOUR_STICKERS = 96;
@@ -377,7 +377,60 @@ export function validateFour(text: string): { ok: true } | { ok: false; message:
   for (const [key, count] of homeWings) {
     if (seenWings.get(key) !== count) return { ok: false, message: "An edge wing is missing or repeated." };
   }
+  const cornerIssue = fourCornerIssue(text);
+  if (cornerIssue) return { ok: false, message: cornerIssue };
+  // The two stickers of one wing must not be flipped against each other:
+  // swapping them leaves every piece check above intact, but the wings can
+  // then never be paired, and the solver fails on the paint screen. The
+  // orientation of a wing is whether its first colour (by colour order)
+  // sits on the lower-order face of its slot; a real cube always has an
+  // even number of flipped wings.
+  let flipped = 0;
+  for (const edge of FOUR_EDGES) {
+    for (const wing of edge.wings) flipped += wingOrientation(text, wing.slots);
+  }
+  if (flipped % 2 !== 0) {
+    return { ok: false, message: "An edge wing is flipped in a way a normal cube cannot reach — check the edge stickers." };
+  }
   return { ok: true };
+}
+
+/** Orientation of one wing: 0 when its first colour sits on the lower-order face of its slot, else 1. */
+function wingOrientation(text: string, slots: [number, number]): number {
+  const [s1, s2] = slots;
+  const c1 = text[s1]!;
+  const c2 = text[s2]!;
+  const f1 = Math.floor(s1 / 16);
+  const f2 = Math.floor(s2 / 16);
+  const firstIsC1 = COLORS.findIndex((color) => COLOR_LETTER[color] === c1) < COLORS.findIndex((color) => COLOR_LETTER[color] === c2);
+  const lowerFace = Math.min(f1, f2);
+  return (firstIsC1 ? f1 === lowerFace : f2 === lowerFace) ? 0 : 1;
+}
+
+/**
+ * Corner problems the colour-set check above cannot see: a corner whose
+ * three colours are a real corner's colours in the mirrored (clockwise)
+ * order, and corners twisted so their twists do not add up. Reads the
+ * painted corners through the 3×3 corner reader, with solved edges and
+ * home centres, so only the corners are judged.
+ */
+function fourCornerIssue(text: string): string | null {
+  const chars = [..."yyyyyyyyyooooooooogggggggggwwwwwwwwwrrrrrrrrrbbbbbbbbb"];
+  const map: Record<string, [number, number]> = { "0,0": [0, 0], "0,2": [0, 3], "2,0": [3, 0], "2,2": [3, 3] };
+  for (const face of FACES) {
+    for (const [row, col] of [[0, 0], [0, 2], [2, 0], [2, 2]] as [number, number][]) {
+      const [row4, col4] = map[`${row},${col}`]!;
+      chars[FACES.indexOf(face) * 9 + row * 3 + col] = text[fourOffset(face) + row4 * 4 + col4]!;
+    }
+  }
+  const cubies = readCubies(stringToFacelets(chars.join("")));
+  if (cubies.unknownCorners.length || cubies.duplicateCorners.length) {
+    return "A corner on this cube isn't a real corner piece.";
+  }
+  if (cubies.cornerOri.reduce((sum, value) => sum + value, 0) % 3 !== 0) {
+    return "A corner is twisted in a way a normal cube cannot reach.";
+  }
+  return null;
 }
 
 function cornerSlots(): number[][] {
